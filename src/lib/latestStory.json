@@ -1,0 +1,1166 @@
+{
+  "manifest": {
+    "meta": {
+      "title": "Smart Ways to Invest an Extra $500 a Day",
+      "targetDuration": 45,
+      "stylePreset": "chalk-drawing"
+    },
+    "scenes": [
+      {
+        "sceneNumber": 1,
+        "narration": "Imagine waking up on a Friday morning and checking your phone. A direct deposit has just landed. Your income has suddenly surged to 500 dollars a day. You feel the weight of financial anxiety lift.",
+        "duration": 10,
+        "layout": {
+          "background": {
+            "type": "image",
+            "value": "#f8fafc"
+          },
+          "elements": [
+            {
+              "id": "sc1_title",
+              "type": "text",
+              "content": "The Monthly Income Decision",
+              "x": 6,
+              "y": 4,
+              "width": 44,
+              "height": 8,
+              "zIndex": 10,
+              "enterAnimation": {
+                "type": "slide_up",
+                "duration": 15,
+                "delay": 321
+              },
+              "revealTimeSeconds": 10.693
+            },
+            {
+              "id": "sc1_phone",
+              "type": "image",
+              "sourceAssetId": "generated_assets/money_chalk-drawing_1784928723532.png",
+              "content": "Direct Deposit: +$500/day ($182.5k/yr)",
+              "revealSyncPhrase": "500 dollars",
+              "imageDescription": "A high-definition photorealistic 35mm photograph of thick stacks of crisp green 100 dollar cash banknotes bound with paper bank straps on a clean white surface, master shot, sharp focus, 8k resolution",
+              "x": 10,
+              "y": 18,
+              "width": 18,
+              "height": 24,
+              "zIndex": 1,
+              "enterAnimation": {
+                "type": "scale_in",
+                "duration": 15,
+                "delay": 15
+              },
+              "revealTimeSeconds": 7.105
+            },
+            {
+              "id": "sc1_glow",
+              "type": "highlight_overlay",
+              "sourceAssetId": "sc1_phone",
+              "x": 10,
+              "y": 18,
+              "width": 18,
+              "height": 24,
+              "zIndex": 5,
+              "highlightOverlay": {
+                "targetAssetId": "sc1_phone",
+                "targetRegion": "full",
+                "style": "glow"
+              },
+              "enterAnimation": {
+                "type": "fade_in",
+                "duration": 10,
+                "delay": 15
+              },
+              "revealTimeSeconds": 0
+            }
+          ]
+        },
+        "syncHints": [
+          {
+            "text": "500 dollars",
+            "triggerAction": "reveal",
+            "targetElementId": "sc1_phone",
+            "audioStart": 7.105,
+            "audioEnd": 7.279
+          }
+        ]
+      },
+      {
+        "sceneNumber": 2,
+        "narration": "Your high-interest debt has been eradicated. A fortress of 15,000 dollars sits quietly in a high-yield account, fully insulating you from sudden emergencies. But what happens next?",
+        "duration": 10,
+        "layout": {
+          "background": {
+            "type": "image",
+            "value": "#f8fafc"
+          },
+          "elements": [
+            {
+              "id": "sc1_title",
+              "type": "text",
+              "content": "Building the Financial Fortress",
+              "x": 6,
+              "y": 4,
+              "width": 44,
+              "height": 8,
+              "zIndex": 10,
+              "revealTimeSeconds": 18.681,
+              "enterAnimation": {
+                "type": "scale_in",
+                "duration": 15,
+                "delay": 151
+              }
+            },
+            {
+              "id": "sc1_phone",
+              "type": "image",
+              "sourceAssetId": "generated_assets/money_chalk-drawing_1784928723532.png",
+              "content": "Direct Deposit: +$500/day",
+              "revealSyncPhrase": "direct deposit",
+              "x": 10,
+              "y": 18,
+              "width": 18,
+              "height": 24,
+              "zIndex": 1,
+              "revealTimeSeconds": 32.775,
+              "enterAnimation": {
+                "type": "scale_in",
+                "duration": 15,
+                "delay": 15
+              }
+            },
+            {
+              "id": "sc2_conn",
+              "type": "connector",
+              "connectorStyle": "arrow",
+              "fromElementId": "sc1_phone",
+              "toElementId": "sc2_fortress",
+              "content": "Initial Flow",
+              "x": 30,
+              "y": 28,
+              "width": 12,
+              "height": 4,
+              "zIndex": 2,
+              "enterAnimation": {
+                "type": "fade_in",
+                "duration": 10,
+                "delay": 84
+              },
+              "revealTimeSeconds": 16.614
+            },
+            {
+              "id": "sc2_fortress",
+              "type": "image",
+              "sourceAssetId": "generated_assets/vault_chalk-drawing_1784928725095.png",
+              "content": "Zero Debt & $15k Fortress",
+              "revealSyncPhrase": "fortress of 15,000 dollars",
+              "imageDescription": "A sleek 3D gold and stainless-steel bank safe vault with digital wheel dial lock and emerald security shield badge",
+              "x": 72,
+              "y": 18,
+              "width": 20,
+              "height": 26,
+              "zIndex": 1,
+              "enterAnimation": {
+                "type": "slide_up",
+                "duration": 15,
+                "delay": 89
+              },
+              "revealTimeSeconds": 16.614
+            },
+            {
+              "id": "sc2_glow",
+              "type": "highlight_overlay",
+              "sourceAssetId": "sc2_fortress",
+              "x": 72,
+              "y": 18,
+              "width": 20,
+              "height": 26,
+              "zIndex": 5,
+              "highlightOverlay": {
+                "targetAssetId": "sc2_fortress",
+                "targetRegion": "full",
+                "style": "glow"
+              },
+              "enterAnimation": {
+                "type": "fade_in",
+                "duration": 10,
+                "delay": 89
+              },
+              "revealTimeSeconds": 13.653
+            }
+          ]
+        },
+        "syncHints": [
+          {
+            "text": "fortress of 15,000 dollars",
+            "triggerAction": "reveal",
+            "targetElementId": "sc2_fortress",
+            "audioStart": 16.614,
+            "audioEnd": 16.823
+          }
+        ]
+      },
+      {
+        "sceneNumber": 3,
+        "narration": "Instead of letting cash evaporate, you route it through an automated waterfall system. 200 dollars flows directly into your reserve vault, 200 dollars fuels compounding growth, and 100 dollars expands your skill and team buffer.",
+        "duration": 18,
+        "layout": {
+          "background": {
+            "type": "image",
+            "value": "#f8fafc"
+          },
+          "elements": [
+            {
+              "id": "sc3_title",
+              "type": "text",
+              "content": "The Automated Waterfall Allocation System",
+              "x": 6,
+              "y": 4,
+              "width": 52,
+              "height": 8,
+              "zIndex": 10,
+              "enterAnimation": {
+                "type": "slide_up",
+                "duration": 15,
+                "delay": 642
+              },
+              "revealTimeSeconds": 48.529
+            },
+            {
+              "id": "sc3_money",
+              "type": "image",
+              "sourceAssetId": "generated_assets/money_chalk-drawing_1784928723532.png",
+              "content": "+$500 Monthly Income",
+              "revealSyncPhrase": "cash evaporate",
+              "x": 8,
+              "y": 18,
+              "width": 18,
+              "height": 24,
+              "zIndex": 1,
+              "enterAnimation": {
+                "type": "scale_in",
+                "duration": 15,
+                "delay": 0
+              },
+              "revealTimeSeconds": 27.121
+            },
+            {
+              "id": "conn_income_waterfall",
+              "type": "connector",
+              "connectorStyle": "arrow",
+              "fromElementId": "sc3_money",
+              "toElementId": "sc3_waterfall",
+              "content": "Route Surplus",
+              "x": 27,
+              "y": 28,
+              "width": 11,
+              "height": 4,
+              "zIndex": 2,
+              "enterAnimation": {
+                "type": "fade_in",
+                "duration": 10,
+                "delay": 74
+              },
+              "revealTimeSeconds": 29.547
+            },
+            {
+              "id": "sc3_waterfall",
+              "type": "image",
+              "sourceAssetId": "generated_assets/waterfall_chalk-drawing_1784928770509.png",
+              "content": "Waterfall System Hub",
+              "revealSyncPhrase": "automated waterfall",
+              "replacesElementId": "sc2_fortress",
+              "imageDescription": "A photorealistic high-definition 35mm photograph of a majestic multi-tiered waterfall cascading over slate rock cliffs into a turquoise alpine lake surrounded by pine trees, soft morning sunlight, 8k resolution",
+              "x": 39,
+              "y": 16,
+              "width": 22,
+              "height": 26,
+              "zIndex": 1,
+              "enterAnimation": {
+                "type": "scale_in",
+                "duration": 15,
+                "delay": 79
+              },
+              "revealTimeSeconds": 29.745
+            },
+            {
+              "id": "conn_vault",
+              "type": "connector",
+              "connectorStyle": "arrow",
+              "fromElementId": "sc3_waterfall",
+              "toElementId": "sc3_vault",
+              "content": "$200 Vault",
+              "x": 18,
+              "y": 46,
+              "width": 20,
+              "height": 4,
+              "zIndex": 2,
+              "enterAnimation": {
+                "type": "fade_in",
+                "duration": 10,
+                "delay": 199
+              },
+              "revealTimeSeconds": 32.775
+            },
+            {
+              "id": "conn_growth",
+              "type": "connector",
+              "connectorStyle": "arrow",
+              "fromElementId": "sc3_waterfall",
+              "toElementId": "sc3_growth",
+              "content": "$200 Growth",
+              "x": 49,
+              "y": 45,
+              "width": 4,
+              "height": 4,
+              "zIndex": 2,
+              "enterAnimation": {
+                "type": "fade_in",
+                "duration": 10,
+                "delay": 278
+              },
+              "revealTimeSeconds": 32.775
+            },
+            {
+              "id": "conn_people",
+              "type": "connector",
+              "connectorStyle": "arrow",
+              "fromElementId": "sc3_waterfall",
+              "toElementId": "sc3_people",
+              "content": "$100 Skills",
+              "x": 63,
+              "y": 46,
+              "width": 18,
+              "height": 4,
+              "zIndex": 2,
+              "enterAnimation": {
+                "type": "fade_in",
+                "duration": 10,
+                "delay": 378
+              },
+              "revealTimeSeconds": 39.613
+            },
+            {
+              "id": "sc3_vault",
+              "type": "image",
+              "sourceAssetId": "generated_assets/vault_chalk-drawing_1784928725095.png",
+              "content": "1️⃣ Reserve Vault (+$200)",
+              "revealSyncPhrase": "reserve vault",
+              "x": 8,
+              "y": 60,
+              "width": 18,
+              "height": 25,
+              "zIndex": 1,
+              "enterAnimation": {
+                "type": "slide_up",
+                "duration": 15,
+                "delay": 204
+              },
+              "revealTimeSeconds": 33.912
+            },
+            {
+              "id": "sc3_growth",
+              "type": "image",
+              "sourceAssetId": "generated_assets/growth_chart_chalk-drawing_1784928815662.png",
+              "content": "2️⃣ Compounding Growth (+$200)",
+              "revealSyncPhrase": "compounding growth",
+              "imageDescription": "A vibrant 3D compounding growth chart mountain with glowing upward green trajectory line and rocket at peak",
+              "x": 41,
+              "y": 60,
+              "width": 18,
+              "height": 25,
+              "zIndex": 1,
+              "enterAnimation": {
+                "type": "slide_up",
+                "duration": 15,
+                "delay": 283
+              },
+              "revealTimeSeconds": 36.548
+            },
+            {
+              "id": "sc3_people",
+              "type": "image",
+              "sourceAssetId": "generated_assets/people_chalk-drawing_1784928860613.png",
+              "content": "3️⃣ Skill & Team Buffer (+$100)",
+              "revealSyncPhrase": "skill and team buffer",
+              "imageDescription": "A high-definition photorealistic 35mm photo of a diverse executive team collaborating around a wooden table with laptops",
+              "x": 74,
+              "y": 60,
+              "width": 18,
+              "height": 25,
+              "zIndex": 1,
+              "enterAnimation": {
+                "type": "slide_up",
+                "duration": 15,
+                "delay": 383
+              },
+              "revealTimeSeconds": 39.88
+            },
+            {
+              "id": "sc3_vault_glow",
+              "type": "highlight_overlay",
+              "sourceAssetId": "sc3_vault",
+              "x": 8,
+              "y": 60,
+              "width": 18,
+              "height": 25,
+              "zIndex": 5,
+              "highlightOverlay": {
+                "targetAssetId": "sc3_vault",
+                "targetRegion": "full",
+                "style": "glow"
+              },
+              "enterAnimation": {
+                "type": "fade_in",
+                "duration": 10,
+                "delay": 215
+              },
+              "revealTimeSeconds": 34.284
+            },
+            {
+              "id": "sc3_growth_glow",
+              "type": "highlight_overlay",
+              "sourceAssetId": "sc3_growth",
+              "x": 41,
+              "y": 60,
+              "width": 18,
+              "height": 25,
+              "zIndex": 5,
+              "highlightOverlay": {
+                "targetAssetId": "sc3_growth",
+                "targetRegion": "full",
+                "style": "glow"
+              },
+              "enterAnimation": {
+                "type": "fade_in",
+                "duration": 10,
+                "delay": 283
+              },
+              "revealTimeSeconds": 36.548
+            }
+          ]
+        },
+        "syncHints": [
+          {
+            "text": "automated waterfall",
+            "triggerAction": "reveal",
+            "targetElementId": "sc3_waterfall",
+            "audioStart": 29.745,
+            "audioEnd": 30
+          },
+          {
+            "text": "reserve vault",
+            "triggerAction": "reveal",
+            "targetElementId": "sc3_vault",
+            "audioStart": 33.912,
+            "audioEnd": 34.284
+          },
+          {
+            "text": "compounding growth",
+            "triggerAction": "reveal",
+            "targetElementId": "sc3_growth",
+            "audioStart": 36.548,
+            "audioEnd": 37.163
+          },
+          {
+            "text": "skill and team buffer",
+            "triggerAction": "reveal",
+            "targetElementId": "sc3_people",
+            "audioStart": 39.88,
+            "audioEnd": 40.542
+          }
+        ]
+      },
+      {
+        "sceneNumber": 4,
+        "narration": "You have built a system that turns momentum into lasting security. Leaving you with the freedom to focus entirely on living your life.",
+        "duration": 7,
+        "layout": {
+          "background": {
+            "type": "image",
+            "value": "#f8fafc"
+          },
+          "elements": [
+            {
+              "id": "sc4_title",
+              "type": "text",
+              "content": "Systemic Freedom & Scale",
+              "x": 6,
+              "y": 4,
+              "width": 50,
+              "height": 8,
+              "zIndex": 10,
+              "revealTimeSeconds": 44.118,
+              "enterAnimation": {
+                "type": "scale_in",
+                "duration": 15,
+                "delay": 0
+              }
+            },
+            {
+              "id": "sc4_building",
+              "type": "image",
+              "sourceAssetId": "generated_assets/building_chalk-drawing_1784928905943.png",
+              "content": "Enterprise Foundation & Long-Term Freedom",
+              "revealSyncPhrase": "freedom to focus",
+              "replacesElementId": "sc3_waterfall",
+              "imageDescription": "A high-definition photorealistic 35mm photograph of a modern high-rise glass skyscraper building reaching into the sky, cinematic golden hour lighting",
+              "x": 36,
+              "y": 18,
+              "width": 28,
+              "height": 38,
+              "zIndex": 1,
+              "enterAnimation": {
+                "type": "scale_in",
+                "duration": 20,
+                "delay": 15
+              },
+              "revealTimeSeconds": 48.529
+            }
+          ]
+        },
+        "syncHints": [
+          {
+            "text": "freedom to focus",
+            "triggerAction": "reveal",
+            "targetElementId": "sc4_building",
+            "audioStart": 48.529,
+            "audioEnd": 48.947
+          }
+        ]
+      }
+    ]
+  },
+  "wordTimestamps": [
+    {
+      "word": "Imagine",
+      "start": 0,
+      "end": 0.615
+    },
+    {
+      "word": "waking",
+      "start": 0.615,
+      "end": 0.987
+    },
+    {
+      "word": "up",
+      "start": 0.987,
+      "end": 1.138
+    },
+    {
+      "word": "on",
+      "start": 1.138,
+      "end": 1.231
+    },
+    {
+      "word": "a",
+      "start": 1.231,
+      "end": 1.3
+    },
+    {
+      "word": "Friday",
+      "start": 1.3,
+      "end": 1.66
+    },
+    {
+      "word": "morning",
+      "start": 1.66,
+      "end": 1.95
+    },
+    {
+      "word": "and",
+      "start": 1.95,
+      "end": 2.067
+    },
+    {
+      "word": "checking",
+      "start": 2.067,
+      "end": 2.403
+    },
+    {
+      "word": "your",
+      "start": 2.403,
+      "end": 2.554
+    },
+    {
+      "word": "phone.",
+      "start": 2.554,
+      "end": 3.32
+    },
+    {
+      "word": "A",
+      "start": 3.32,
+      "end": 3.471
+    },
+    {
+      "word": "direct",
+      "start": 3.471,
+      "end": 3.878
+    },
+    {
+      "word": "deposit",
+      "start": 3.878,
+      "end": 4.644
+    },
+    {
+      "word": "has",
+      "start": 4.644,
+      "end": 4.923
+    },
+    {
+      "word": "just",
+      "start": 4.923,
+      "end": 5.283
+    },
+    {
+      "word": "landed.",
+      "start": 5.283,
+      "end": 6.42
+    },
+    {
+      "word": "Your",
+      "start": 6.42,
+      "end": 6.676
+    },
+    {
+      "word": "income",
+      "start": 6.676,
+      "end": 7.105
+    },
+    {
+      "word": "has",
+      "start": 7.105,
+      "end": 7.279
+    },
+    {
+      "word": "suddenly",
+      "start": 7.279,
+      "end": 7.744
+    },
+    {
+      "word": "surged",
+      "start": 7.744,
+      "end": 8.231
+    },
+    {
+      "word": "to",
+      "start": 8.231,
+      "end": 8.452
+    },
+    {
+      "word": "500",
+      "start": 8.452,
+      "end": 9.207
+    },
+    {
+      "word": "dollars",
+      "start": 9.207,
+      "end": 9.59
+    },
+    {
+      "word": "a",
+      "start": 9.59,
+      "end": 9.671
+    },
+    {
+      "word": "day.",
+      "start": 9.671,
+      "end": 10.693
+    },
+    {
+      "word": "You",
+      "start": 10.693,
+      "end": 10.89
+    },
+    {
+      "word": "feel",
+      "start": 10.89,
+      "end": 11.122
+    },
+    {
+      "word": "the",
+      "start": 11.122,
+      "end": 11.238
+    },
+    {
+      "word": "weight",
+      "start": 11.238,
+      "end": 11.494
+    },
+    {
+      "word": "of",
+      "start": 11.494,
+      "end": 11.598
+    },
+    {
+      "word": "financial",
+      "start": 11.598,
+      "end": 12.132
+    },
+    {
+      "word": "anxiety",
+      "start": 12.132,
+      "end": 12.748
+    },
+    {
+      "word": "lift.",
+      "start": 12.748,
+      "end": 13.653
+    },
+    {
+      "word": "Your",
+      "start": 13.653,
+      "end": 13.886
+    },
+    {
+      "word": "high-interest",
+      "start": 13.886,
+      "end": 14.559
+    },
+    {
+      "word": "debt",
+      "start": 14.559,
+      "end": 14.93
+    },
+    {
+      "word": "has",
+      "start": 14.93,
+      "end": 15.128
+    },
+    {
+      "word": "been",
+      "start": 15.128,
+      "end": 15.302
+    },
+    {
+      "word": "eradicated.",
+      "start": 15.302,
+      "end": 16.614
+    },
+    {
+      "word": "A",
+      "start": 16.614,
+      "end": 16.823
+    },
+    {
+      "word": "fortress",
+      "start": 16.823,
+      "end": 17.38
+    },
+    {
+      "word": "of",
+      "start": 17.38,
+      "end": 17.52
+    },
+    {
+      "word": "15,000",
+      "start": 17.52,
+      "end": 18.681
+    },
+    {
+      "word": "dollars",
+      "start": 18.681,
+      "end": 19.354
+    },
+    {
+      "word": "sits",
+      "start": 19.354,
+      "end": 19.691
+    },
+    {
+      "word": "quietly",
+      "start": 19.691,
+      "end": 20.329
+    },
+    {
+      "word": "in",
+      "start": 20.329,
+      "end": 20.445
+    },
+    {
+      "word": "a",
+      "start": 20.445,
+      "end": 20.55
+    },
+    {
+      "word": "high-yield",
+      "start": 20.55,
+      "end": 21.153
+    },
+    {
+      "word": "account,",
+      "start": 21.153,
+      "end": 22.094
+    },
+    {
+      "word": "fully",
+      "start": 22.094,
+      "end": 22.547
+    },
+    {
+      "word": "insulating",
+      "start": 22.547,
+      "end": 23.174
+    },
+    {
+      "word": "you",
+      "start": 23.174,
+      "end": 23.336
+    },
+    {
+      "word": "from",
+      "start": 23.336,
+      "end": 23.557
+    },
+    {
+      "word": "sudden",
+      "start": 23.557,
+      "end": 23.87
+    },
+    {
+      "word": "emergencies.",
+      "start": 23.87,
+      "end": 25.217
+    },
+    {
+      "word": "But",
+      "start": 25.217,
+      "end": 25.426
+    },
+    {
+      "word": "what",
+      "start": 25.426,
+      "end": 25.658
+    },
+    {
+      "word": "happens",
+      "start": 25.658,
+      "end": 26.064
+    },
+    {
+      "word": "next?",
+      "start": 26.064,
+      "end": 27.121
+    },
+    {
+      "word": "Instead",
+      "start": 27.121,
+      "end": 27.585
+    },
+    {
+      "word": "of",
+      "start": 27.585,
+      "end": 27.701
+    },
+    {
+      "word": "letting",
+      "start": 27.701,
+      "end": 28.003
+    },
+    {
+      "word": "cash",
+      "start": 28.003,
+      "end": 28.433
+    },
+    {
+      "word": "evaporate,",
+      "start": 28.433,
+      "end": 29.547
+    },
+    {
+      "word": "you",
+      "start": 29.547,
+      "end": 29.745
+    },
+    {
+      "word": "route",
+      "start": 29.745,
+      "end": 30
+    },
+    {
+      "word": "it",
+      "start": 30,
+      "end": 30.116
+    },
+    {
+      "word": "through",
+      "start": 30.116,
+      "end": 30.407
+    },
+    {
+      "word": "an",
+      "start": 30.407,
+      "end": 30.546
+    },
+    {
+      "word": "automated",
+      "start": 30.546,
+      "end": 31.126
+    },
+    {
+      "word": "waterfall",
+      "start": 31.126,
+      "end": 31.648
+    },
+    {
+      "word": "system.",
+      "start": 31.648,
+      "end": 32.775
+    },
+    {
+      "word": "200",
+      "start": 32.775,
+      "end": 33.46
+    },
+    {
+      "word": "dollars",
+      "start": 33.46,
+      "end": 33.912
+    },
+    {
+      "word": "flows",
+      "start": 33.912,
+      "end": 34.284
+    },
+    {
+      "word": "directly",
+      "start": 34.284,
+      "end": 34.876
+    },
+    {
+      "word": "into",
+      "start": 34.876,
+      "end": 35.108
+    },
+    {
+      "word": "your",
+      "start": 35.108,
+      "end": 35.271
+    },
+    {
+      "word": "reserve",
+      "start": 35.271,
+      "end": 35.666
+    },
+    {
+      "word": "vault,",
+      "start": 35.666,
+      "end": 36.548
+    },
+    {
+      "word": "200",
+      "start": 36.548,
+      "end": 37.163
+    },
+    {
+      "word": "dollars",
+      "start": 37.163,
+      "end": 37.581
+    },
+    {
+      "word": "fuels",
+      "start": 37.581,
+      "end": 38.057
+    },
+    {
+      "word": "compounding",
+      "start": 38.057,
+      "end": 38.731
+    },
+    {
+      "word": "growth,",
+      "start": 38.731,
+      "end": 39.613
+    },
+    {
+      "word": "and",
+      "start": 39.613,
+      "end": 39.88
+    },
+    {
+      "word": "100",
+      "start": 39.88,
+      "end": 40.542
+    },
+    {
+      "word": "dollars",
+      "start": 40.542,
+      "end": 40.995
+    },
+    {
+      "word": "expands",
+      "start": 40.995,
+      "end": 41.772
+    },
+    {
+      "word": "your",
+      "start": 41.772,
+      "end": 41.958
+    },
+    {
+      "word": "skill",
+      "start": 41.958,
+      "end": 42.411
+    },
+    {
+      "word": "and",
+      "start": 42.411,
+      "end": 42.655
+    },
+    {
+      "word": "team",
+      "start": 42.655,
+      "end": 42.98
+    },
+    {
+      "word": "buffer.",
+      "start": 42.98,
+      "end": 44.118
+    },
+    {
+      "word": "You",
+      "start": 44.118,
+      "end": 44.303
+    },
+    {
+      "word": "have",
+      "start": 44.303,
+      "end": 44.466
+    },
+    {
+      "word": "built",
+      "start": 44.466,
+      "end": 44.733
+    },
+    {
+      "word": "a",
+      "start": 44.733,
+      "end": 44.826
+    },
+    {
+      "word": "system",
+      "start": 44.826,
+      "end": 45.313
+    },
+    {
+      "word": "that",
+      "start": 45.313,
+      "end": 45.511
+    },
+    {
+      "word": "turns",
+      "start": 45.511,
+      "end": 45.859
+    },
+    {
+      "word": "momentum",
+      "start": 45.859,
+      "end": 46.44
+    },
+    {
+      "word": "into",
+      "start": 46.44,
+      "end": 46.753
+    },
+    {
+      "word": "lasting",
+      "start": 46.753,
+      "end": 47.276
+    },
+    {
+      "word": "security.",
+      "start": 47.276,
+      "end": 48.529
+    },
+    {
+      "word": "Leaving",
+      "start": 48.529,
+      "end": 48.947
+    },
+    {
+      "word": "you",
+      "start": 48.947,
+      "end": 49.087
+    },
+    {
+      "word": "with",
+      "start": 49.087,
+      "end": 49.249
+    },
+    {
+      "word": "the",
+      "start": 49.249,
+      "end": 49.365
+    },
+    {
+      "word": "freedom",
+      "start": 49.365,
+      "end": 49.76
+    },
+    {
+      "word": "to",
+      "start": 49.76,
+      "end": 49.934
+    },
+    {
+      "word": "focus",
+      "start": 49.934,
+      "end": 50.399
+    },
+    {
+      "word": "entirely",
+      "start": 50.399,
+      "end": 51.362
+    },
+    {
+      "word": "on",
+      "start": 51.362,
+      "end": 51.652
+    },
+    {
+      "word": "living",
+      "start": 51.652,
+      "end": 52.001
+    },
+    {
+      "word": "your",
+      "start": 52.001,
+      "end": 52.187
+    },
+    {
+      "word": "life.",
+      "start": 52.187,
+      "end": 52.895
+    }
+  ],
+  "sceneBoundaries": [
+    {
+      "sceneNumber": 1,
+      "startFrame": 0,
+      "durationInFrames": 410,
+      "startSeconds": 0,
+      "durationSeconds": 13.653
+    },
+    {
+      "sceneNumber": 2,
+      "startFrame": 410,
+      "durationInFrames": 404,
+      "startSeconds": 13.653,
+      "durationSeconds": 13.467999999999998
+    },
+    {
+      "sceneNumber": 3,
+      "startFrame": 814,
+      "durationInFrames": 510,
+      "startSeconds": 27.121,
+      "durationSeconds": 16.997000000000003
+    },
+    {
+      "sceneNumber": 4,
+      "startFrame": 1324,
+      "durationInFrames": 263,
+      "startSeconds": 44.118,
+      "durationSeconds": 8.777000000000001
+    }
+  ],
+  "audioDurationSeconds": 52.895
+}

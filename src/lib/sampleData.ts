@@ -1,0 +1,318 @@
+import { StoryboardManifest, WordTimestamp } from '../types/storyboard';
+
+/**
+ * Sample Storyboard Manifest demonstrating single-screen whiteboard system architecture with:
+ * 1) Photorealistic 35mm Photography assets & 3D renders
+ * 2) Dynamic directional vector arrows pointing from Waterfall Hub to each allocation split
+ * 3) Unique non-overlapping canvas coordinates (no squishing/stacking)
+ * 4) Persistent whiteboard image reveals & transient highlight glow overlays
+ */
+export const sampleStoryboardManifest: StoryboardManifest = {
+  meta: {
+    title: 'Smart Ways to Invest an Extra $500 a Day',
+    targetDuration: 45,
+    stylePreset: 'whiteboard',
+    primaryColor: '#2563eb',
+  },
+  scenes: [
+    // Scene 1: Initial Income Surge (0:00 - 0:10)
+    {
+      sceneNumber: 1,
+      narration: `Imagine waking up on a Friday morning and checking your phone. A direct deposit has just landed. Your income has suddenly surged to 500 dollars a day. You feel the weight of financial anxiety lift.`,
+      duration: 10,
+      layout: {
+        background: { type: 'solid', value: '#f8fafc' },
+        elements: [
+          {
+            id: 'sc1_title',
+            type: 'text',
+            content: `The Monthly Income Decision`,
+            x: 6,
+            y: 4,
+            width: 42,
+            height: 8,
+            zIndex: 10,
+            enterAnimation: { type: 'slide_up', duration: 15, delay: 0 },
+          },
+          {
+            id: 'sc1_phone',
+            type: 'image',
+            sourceAssetId: 'asset:money',
+            content: '+$500/day Direct Deposit',
+            revealSyncPhrase: '500 dollars',
+            imageDescription: 'A high-definition photorealistic 35mm photograph of thick stacks of crisp green 100 dollar cash banknotes bound with paper bank straps on a clean white surface, master shot, sharp focus, 8k resolution',
+            x: 8,
+            y: 18,
+            width: 20,
+            height: 25,
+            zIndex: 1,
+            enterAnimation: { type: 'scale_in', duration: 15, delay: 15 },
+          },
+          {
+            id: 'sc1_glow',
+            type: 'highlight_overlay',
+            sourceAssetId: 'sc1_phone',
+            x: 8,
+            y: 18,
+            width: 20,
+            height: 25,
+            zIndex: 5,
+            highlightOverlay: { targetAssetId: 'sc1_phone', targetRegion: 'full', style: 'glow' },
+            enterAnimation: { type: 'fade_in', duration: 10, delay: 15 },
+          },
+        ],
+      },
+      syncHints: [{ text: '500 dollars', triggerAction: 'reveal', targetElementId: 'sc1_phone' }],
+    },
+
+    // Scene 2: Debt Elimination & Fortress Vault (0:10 - 0:20)
+    {
+      sceneNumber: 2,
+      narration: `Your high-interest debt has been eradicated. A fortress of 15,000 dollars sits quietly in a high-yield account, fully insulating you from sudden emergencies. But what happens next?`,
+      duration: 10,
+      layout: {
+        background: { type: 'solid', value: '#f8fafc' },
+        elements: [
+          {
+            id: 'sc2_fortress',
+            type: 'image',
+            sourceAssetId: 'asset:vault',
+            content: 'Zero Debt & $15k Fortress',
+            revealSyncPhrase: 'fortress of 15,000 dollars',
+            imageDescription: 'A photorealistic 35mm picture of a massive 3D gold and stainless-steel bank safe vault door with a digital wheel dial lock',
+            x: 74,
+            y: 18,
+            width: 20,
+            height: 25,
+            zIndex: 1,
+            enterAnimation: { type: 'slide_up', duration: 15, delay: 15 },
+          },
+          {
+            id: 'sc2_glow',
+            type: 'highlight_overlay',
+            sourceAssetId: 'sc2_fortress',
+            x: 74,
+            y: 18,
+            width: 20,
+            height: 25,
+            zIndex: 5,
+            highlightOverlay: { targetAssetId: 'sc2_fortress', targetRegion: 'full', style: 'glow' },
+            enterAnimation: { type: 'fade_in', duration: 10, delay: 15 },
+          },
+        ],
+      },
+      syncHints: [{ text: 'fortress of 15,000 dollars', triggerAction: 'reveal', targetElementId: 'sc2_fortress' }],
+    },
+
+    // Scene 3: Automated Waterfall System Hub & 3 Allocation Splits (0:20 - 0:38)
+    {
+      sceneNumber: 3,
+      narration: `Instead of letting cash evaporate, you route it through an automated waterfall system. 200 dollars flows directly into your reserve vault, 200 dollars fuels compounding growth, and 100 dollars expands your skill and team buffer.`,
+      duration: 18,
+      layout: {
+        background: { type: 'solid', value: '#f8fafc' },
+        elements: [
+          // Central System Hub: Waterfall (Upper Center)
+          {
+            id: 'sc3_waterfall',
+            type: 'image',
+            sourceAssetId: 'asset:waterfall',
+            content: 'Waterfall Allocation System Hub',
+            revealSyncPhrase: 'automated waterfall',
+            replacesElementId: 'sc2_fortress',
+            imageDescription: 'A high-definition photorealistic 35mm photograph of a majestic multi-tiered waterfall cascading over slate rock cliffs into a turquoise alpine lake surrounded by pine trees, soft morning sunlight, 8k resolution',
+            x: 40,
+            y: 16,
+            width: 22,
+            height: 26,
+            zIndex: 1,
+            enterAnimation: { type: 'scale_in', duration: 15, delay: 30 },
+          },
+
+          // Vector Arrow 1: Income Phone -> Waterfall Hub
+          {
+            id: 'conn_income_waterfall',
+            type: 'connector',
+            connectorStyle: 'arrow',
+            fromElementId: 'sc1_phone',
+            toElementId: 'sc3_waterfall',
+            content: 'Route Surplus',
+            x: 28,
+            y: 20,
+            width: 12,
+            height: 4,
+            zIndex: 2,
+            enterAnimation: { type: 'fade_in', duration: 10, delay: 25 },
+          },
+
+          // 3 Directional Vector Arrows pointing from Waterfall Hub down to each allocation split
+          {
+            id: 'conn_vault',
+            type: 'connector',
+            connectorStyle: 'arrow',
+            fromElementId: 'sc3_waterfall',
+            toElementId: 'sc3_vault',
+            content: '$200 Vault',
+            x: 25,
+            y: 42,
+            width: 15,
+            height: 18,
+            zIndex: 2,
+            enterAnimation: { type: 'fade_in', duration: 10, delay: 45 },
+          },
+          {
+            id: 'conn_growth',
+            type: 'connector',
+            connectorStyle: 'arrow',
+            fromElementId: 'sc3_waterfall',
+            toElementId: 'sc3_growth',
+            content: '$200 Growth',
+            x: 49,
+            y: 42,
+            width: 4,
+            height: 18,
+            zIndex: 2,
+            enterAnimation: { type: 'fade_in', duration: 10, delay: 75 },
+          },
+          {
+            id: 'conn_people',
+            type: 'connector',
+            connectorStyle: 'arrow',
+            fromElementId: 'sc3_waterfall',
+            toElementId: 'sc3_people',
+            content: '$100 Skills',
+            x: 62,
+            y: 42,
+            width: 15,
+            height: 18,
+            zIndex: 2,
+            enterAnimation: { type: 'fade_in', duration: 10, delay: 105 },
+          },
+
+          // Spaced-Out Bottom Row: 3 Target Allocation Nodes
+          {
+            id: 'sc3_vault',
+            type: 'image',
+            sourceAssetId: 'asset:vault',
+            content: '1️⃣ Reserve Vault (+$200)',
+            revealSyncPhrase: 'reserve vault',
+            x: 8,
+            y: 62,
+            width: 18,
+            height: 25,
+            zIndex: 1,
+            enterAnimation: { type: 'slide_up', duration: 15, delay: 50 },
+          },
+          {
+            id: 'sc3_growth',
+            type: 'image',
+            sourceAssetId: 'asset:growth_chart',
+            content: '2️⃣ Compounding Growth (+$200)',
+            revealSyncPhrase: 'compounding growth',
+            imageDescription: 'A vibrant 3D compounding growth chart mountain with glowing upward green trajectory line and rocket at peak',
+            x: 41,
+            y: 62,
+            width: 18,
+            height: 25,
+            zIndex: 1,
+            enterAnimation: { type: 'slide_up', duration: 15, delay: 80 },
+          },
+          {
+            id: 'sc3_people',
+            type: 'image',
+            sourceAssetId: 'asset:people',
+            content: '3️⃣ Skill & Team Buffer (+$100)',
+            revealSyncPhrase: 'skill and team buffer',
+            imageDescription: 'A high-definition photorealistic 35mm photo of a diverse executive team collaborating around a wooden table with laptops',
+            x: 74,
+            y: 62,
+            width: 18,
+            height: 25,
+            zIndex: 1,
+            enterAnimation: { type: 'slide_up', duration: 15, delay: 110 },
+          },
+
+          // Focus Glow Highlights (Transient - disappear when scene advances)
+          {
+            id: 'sc3_vault_glow',
+            type: 'highlight_overlay',
+            sourceAssetId: 'sc3_vault',
+            x: 8,
+            y: 62,
+            width: 18,
+            height: 25,
+            zIndex: 5,
+            highlightOverlay: { targetAssetId: 'sc3_vault', targetRegion: 'full', style: 'glow' },
+            enterAnimation: { type: 'fade_in', duration: 10, delay: 50 },
+          },
+          {
+            id: 'sc3_growth_glow',
+            type: 'highlight_overlay',
+            sourceAssetId: 'sc3_growth',
+            x: 41,
+            y: 62,
+            width: 18,
+            height: 25,
+            zIndex: 5,
+            highlightOverlay: { targetAssetId: 'sc3_growth', targetRegion: 'full', style: 'glow' },
+            enterAnimation: { type: 'fade_in', duration: 10, delay: 80 },
+          },
+        ],
+      },
+      syncHints: [
+        { text: 'automated waterfall', triggerAction: 'reveal', targetElementId: 'sc3_waterfall' },
+        { text: 'reserve vault', triggerAction: 'reveal', targetElementId: 'sc3_vault' },
+        { text: 'compounding growth', triggerAction: 'reveal', targetElementId: 'sc3_growth' },
+        { text: 'skill and team buffer', triggerAction: 'reveal', targetElementId: 'sc3_people' },
+      ],
+    },
+
+    // Scene 4: Systemic Freedom & Finale (0:38 - 0:45)
+    {
+      sceneNumber: 4,
+      narration: `You have built a system that turns momentum into lasting security. Leaving you with the freedom to focus entirely on living your life.`,
+      duration: 7,
+      layout: {
+        background: { type: 'solid', value: '#f8fafc' },
+        elements: [
+          {
+            id: 'sc4_title',
+            type: 'text',
+            content: 'Systemic Freedom & Scale',
+            x: 6,
+            y: 4,
+            width: 50,
+            height: 8,
+            zIndex: 10,
+          },
+          {
+            id: 'sc4_building',
+            type: 'image',
+            sourceAssetId: 'asset:building',
+            content: 'Enterprise Foundation & Long-Term Freedom',
+            revealSyncPhrase: 'freedom to focus',
+            replacesElementId: 'sc3_waterfall',
+            imageDescription: 'A high-definition photorealistic 35mm photograph of a modern high-rise glass skyscraper building reaching into the sky, cinematic golden hour lighting',
+            x: 36,
+            y: 18,
+            width: 28,
+            height: 38,
+            zIndex: 1,
+            enterAnimation: { type: 'scale_in', duration: 20, delay: 10 },
+          },
+        ],
+      },
+      syncHints: [{ text: 'freedom to focus', triggerAction: 'reveal', targetElementId: 'sc4_building' }],
+    },
+  ],
+};
+
+export const sampleWordTimestamps: WordTimestamp[] = [
+  { word: 'Imagine', start: 0.2, end: 0.6 },
+  { word: 'waking', start: 0.7, end: 1.0 },
+  { word: 'up', start: 1.1, end: 1.2 },
+  { word: 'on', start: 1.3, end: 1.4 },
+  { word: 'a', start: 1.5, end: 1.6 },
+  { word: 'Friday', start: 1.7, end: 2.1 },
+  { word: 'morning', start: 2.2, end: 2.6 },
+];

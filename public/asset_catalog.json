@@ -1,0 +1,44 @@
+{
+  "money_chalk-drawing": {
+    "conceptKey": "money_chalk-drawing",
+    "imageUrl": "generated_assets/money_chalk-drawing_1784928723532.png",
+    "provider": "pollinations_ai",
+    "prompt": "A high-definition photorealistic 35mm photograph of thick stacks of crisp green 100 dollar cash banknotes bound with paper bank straps on a clean white surface, master shot, sharp focus, 8k resolution",
+    "generatedAt": "2026-07-24T21:32:04.381Z"
+  },
+  "vault_chalk-drawing": {
+    "conceptKey": "vault_chalk-drawing",
+    "imageUrl": "generated_assets/vault_chalk-drawing_1784928725095.png",
+    "provider": "pollinations_ai",
+    "prompt": "A sleek 3D gold and stainless-steel bank safe vault with digital wheel dial lock and emerald security shield badge",
+    "generatedAt": "2026-07-24T21:32:49.360Z"
+  },
+  "waterfall_chalk-drawing": {
+    "conceptKey": "waterfall_chalk-drawing",
+    "imageUrl": "generated_assets/waterfall_chalk-drawing_1784928770509.png",
+    "provider": "pollinations_ai",
+    "prompt": "A photorealistic high-definition 35mm photograph of a majestic multi-tiered waterfall cascading over slate rock cliffs into a turquoise alpine lake surrounded by pine trees, soft morning sunlight, 8k resolution",
+    "generatedAt": "2026-07-24T21:33:34.482Z"
+  },
+  "growth_chart_chalk-drawing": {
+    "conceptKey": "growth_chart_chalk-drawing",
+    "imageUrl": "generated_assets/growth_chart_chalk-drawing_1784928815662.png",
+    "provider": "pollinations_ai",
+    "prompt": "A vibrant 3D compounding growth chart mountain with glowing upward green trajectory line and rocket at peak",
+    "generatedAt": "2026-07-24T21:34:19.466Z"
+  },
+  "people_chalk-drawing": {
+    "conceptKey": "people_chalk-drawing",
+    "imageUrl": "generated_assets/people_chalk-drawing_1784928860613.png",
+    "provider": "pollinations_ai",
+    "prompt": "A high-definition photorealistic 35mm photo of a diverse executive team collaborating around a wooden table with laptops",
+    "generatedAt": "2026-07-24T21:35:04.939Z"
+  },
+  "building_chalk-drawing": {
+    "conceptKey": "building_chalk-drawing",
+    "imageUrl": "generated_assets/building_chalk-drawing_1784928905943.png",
+    "provider": "pollinations_ai",
+    "prompt": "A high-definition photorealistic 35mm photograph of a modern high-rise glass skyscraper building reaching into the sky, cinematic golden hour lighting",
+    "generatedAt": "2026-07-24T21:35:49.457Z"
+  }
+}

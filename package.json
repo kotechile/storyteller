@@ -7,11 +7,15 @@
   "private": true,
   "dependencies": {
     "@remotion/cli": "4.0.484",
+    "@remotion/google-fonts": "^4.0.484",
+    "@remotion/tailwind-v4": "4.0.484",
+    "@remotion/zod-types": "^4.0.484",
+    "@supabase/supabase-js": "^2.108.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "remotion": "4.0.484",
-    "@remotion/tailwind-v4": "4.0.484",
-    "tailwindcss": "4.0.0"
+    "tailwindcss": "4.0.0",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@remotion/eslint-config-flat": "4.0.484",
@@ -22,10 +26,20 @@
     "typescript": "5.9.3"
   },
   "scripts": {
+    "start": "remotion studio",
     "dev": "remotion studio",
+    "studio": "remotion studio",
+    "generate": "npx tsx src/generateStoryFromUrl.ts",
     "build": "remotion bundle",
     "upgrade": "remotion upgrade",
-    "lint": "eslint src && tsc"
+    "lint": "eslint src && tsc",
+    "render:all": "npm run render:title && npm run render:lower && npm run render:kinetic && npm run render:transparent && npm run render:cta",
+    "render:title": "remotion render title-card out/title-card.mp4 --codec=h264 --crf=18",
+    "render:lower": "remotion render lower-third out/lower-third.mp4 --codec=h264 --crf=18",
+    "render:kinetic": "remotion render kinetic-text out/kinetic-text.mp4 --codec=h264 --crf=18",
+    "render:transparent": "remotion render transparent-overlay out/transparent-overlay.mov --codec=prores --prores-profile=4444 --pixel-format=yuva444p10le --image-format=png",
+    "render:cta": "remotion render call-to-action out/call-to-action.mp4 --codec=h264 --crf=18",
+    "render:sequence": "remotion render transparent-overlay out/sequence/frame-%04d.png --image-format=png"
   },
   "sideEffects": [
     "*.css"
