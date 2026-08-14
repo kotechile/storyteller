@@ -1,4 +1,4 @@
-import { StoryboardManifest, WordTimestamp, StoryboardScene, SyncHint, CanvasElement } from '../types/storyboard';
+import { StoryboardManifest, WordTimestamp, StoryboardScene, SyncHint, CanvasElement, SceneAudio } from '../types/storyboard';
 
 export interface SceneFrameBoundary {
   sceneNumber: number;
@@ -9,93 +9,90 @@ export interface SceneFrameBoundary {
 }
 
 /**
- * Aligns Storyboard sync hints and explicit revealSyncPhrases with TTS word timestamps.
+ * Aligns Storyboard elements with per-scene ElevenLabs word timestamps.
+ * 
+ * With per-scene TTS (synthesizePerSceneSpeech), scene durations come DIRECTLY
+ * from ElevenLabs — no character-level boundary math. Each scene's audio and
+ * word timestamps are isolated (timestamps start from 0 within each scene).
+ * 
  * Guarantees:
- * 1) Image reveals AT THE START of the narration clause/sentence introducing that image!
- * 2) Elements stay permanently visible on the whiteboard canvas across scenes.
- * 3) Highlight overlays appear AT or AFTER target element reveals, NEVER earlier.
+ * 1) Scene durations = ElevenLabs-reported audio lengths (deterministic)
+ * 2) Image reveals align with sync phrases within each scene's isolated timestamps
+ * 3) Scene start times = cumulative sum of previous scene durations
  */
 export function alignStoryboardWithTimestamps(
   manifest: StoryboardManifest,
-  wordTimestamps: WordTimestamp[],
+  sceneAudio: SceneAudio[],
   fps = 30
 ): { alignedManifest: StoryboardManifest; sceneBoundaries: SceneFrameBoundary[] } {
   const sceneBoundaries: SceneFrameBoundary[] = [];
-  let currentWordIndex = 0;
-  let currentFrame = 0;
-  let currentSeconds = 0;
+  let cumulativeStartSec = 0;
 
-  const alignedScenes: StoryboardScene[] = manifest.scenes.map((scene) => {
-    const sceneWords = scene.narration.trim().split(/\s+/).filter(Boolean);
-    const sceneWordCount = sceneWords.length;
-
-    let sceneStartSec = currentSeconds;
-    let sceneEndSec = currentSeconds + (scene.duration || 5);
-
-    if (wordTimestamps.length > 0 && currentWordIndex < wordTimestamps.length) {
-      sceneStartSec = wordTimestamps[currentWordIndex].start;
-      const targetEndIndex = Math.min(
-        currentWordIndex + sceneWordCount - 1,
-        wordTimestamps.length - 1
-      );
-      if (targetEndIndex >= 0 && wordTimestamps[targetEndIndex]) {
-        sceneEndSec = wordTimestamps[targetEndIndex].end;
-      }
-    }
-
-    const durationSeconds = Math.max(sceneEndSec - sceneStartSec, 1.0);
+  const alignedScenes: StoryboardScene[] = manifest.scenes.map((scene, sceneIdx) => {
+    const audio = sceneAudio.find(sa => sa.sceneNumber === scene.sceneNumber);
+    
+    // Scene duration: manifest takes priority (set by Re-Sync), audio as fallback
+    const durationSeconds = scene.duration || audio?.durationSeconds || 5;
     const durationInFrames = Math.max(Math.round(durationSeconds * fps), 30);
+    
+    const sceneStartSec = cumulativeStartSec;
 
     sceneBoundaries.push({
       sceneNumber: scene.sceneNumber,
-      startFrame: currentFrame,
+      startFrame: Math.round(sceneStartSec * fps),
       durationInFrames,
       startSeconds: sceneStartSec,
       durationSeconds,
     });
 
-    // Step 1: Align sync hints to clause start
-    const alignedHints: SyncHint[] = scene.syncHints.map((hint) => {
-      const matchIndex = findClauseStartWordIndex(wordTimestamps, hint.text, currentWordIndex);
-      if (matchIndex !== -1 && wordTimestamps[matchIndex]) {
-        const start = wordTimestamps[matchIndex].start;
-        const end = wordTimestamps[matchIndex].end;
+    cumulativeStartSec += durationSeconds;
+
+    // Get this scene's isolated word timestamps (start from 0 within the scene)
+    const sceneTimestamps = audio?.wordTimestamps || [];
+
+    // Step 1: Align sync hints to clause start within this scene's timestamps
+    const alignedHints: SyncHint[] = (scene.syncHints || []).map((hint) => {
+      const matchIndex = findClauseStartWordIndex(sceneTimestamps, hint.text, 0);
+      if (matchIndex !== -1 && sceneTimestamps[matchIndex]) {
         return {
           ...hint,
-          audioStart: start,
-          audioEnd: end,
+          audioStart: sceneTimestamps[matchIndex].start,
+          audioEnd: sceneTimestamps[matchIndex].end,
         };
       }
-
       return {
         ...hint,
-        audioStart: sceneStartSec + 0.5,
-        audioEnd: sceneStartSec + 1.5,
+        audioStart: 0.5,
+        audioEnd: 1.5,
       };
     });
 
-    // Step 2: Align element reveal timings based on revealSyncPhrase or matching reveal sync hint
+    // Step 2: Align element reveal timings using isolated per-scene timestamps
     const processedElements: CanvasElement[] = (scene.layout?.elements || []).map((element) => {
-      let revealTimeSec = sceneStartSec;
+      let revealTimeSec = 0;
       const syncPhrase = element.revealSyncPhrase || element.content || element.id;
 
-      const matchingHint = alignedHints.find((h) => h.targetElementId === element.id && h.triggerAction === 'reveal');
+      // Check for matching sync hint first
+      const matchingHint = alignedHints.find(
+        (h) => h.targetElementId === element.id && h.triggerAction === 'reveal'
+      );
       if (matchingHint && matchingHint.audioStart !== undefined) {
         revealTimeSec = matchingHint.audioStart;
       } else {
-        const matchIndex = findClauseStartWordIndex(wordTimestamps, syncPhrase, currentWordIndex);
-        if (matchIndex !== -1 && wordTimestamps[matchIndex]) {
-          revealTimeSec = wordTimestamps[matchIndex].start;
+        // Fall back to word-level phrase matching within scene timestamps
+        const matchIndex = findClauseStartWordIndex(sceneTimestamps, syncPhrase, 0);
+        if (matchIndex !== -1 && sceneTimestamps[matchIndex]) {
+          revealTimeSec = sceneTimestamps[matchIndex].start;
         }
       }
 
-      const relativeDelaySec = Math.max(0, revealTimeSec - sceneStartSec);
-
-      // Primary scene image reveals promptly within 0.5s of scene start so images never stay invisible
-      const isPrimarySceneImage = element.type === 'image' && scene.layout?.elements?.find((e) => e.type === 'image')?.id === element.id;
+      // Primary scene image reveals promptly (within 0.5s)
+      const isPrimarySceneImage =
+        element.type === 'image' &&
+        scene.layout?.elements?.find((e) => e.type === 'image')?.id === element.id;
       const effectiveDelaySec = isPrimarySceneImage
-        ? Math.min(relativeDelaySec, 0.5)
-        : relativeDelaySec;
+        ? Math.min(revealTimeSec, 0.5)
+        : revealTimeSec;
 
       const delayFrames = Math.round(effectiveDelaySec * fps);
 
@@ -112,7 +109,7 @@ export function alignStoryboardWithTimestamps(
 
     // Step 3: Synchronize connectors and highlight overlays to target element reveal
     const finalElements = processedElements.map((el) => {
-      // Connector timing sync: Connector A -> B reveals along with (5 frames before) destination image B!
+      // Connector timing: connector reveals 5 frames before its destination
       if (el.type === 'connector' && el.toElementId) {
         const targetElement = processedElements.find((t) => t.id === el.toElementId);
         if (targetElement && targetElement.enterAnimation) {
@@ -128,15 +125,13 @@ export function alignStoryboardWithTimestamps(
         }
       }
 
-      // Highlight overlay timing sync:
+      // Highlight overlay timing: aligns with target element reveal
       if (el.type === 'highlight_overlay') {
         const targetId = el.sourceAssetId || el.highlightOverlay?.targetAssetId;
         const targetElement = processedElements.find((t) => t.id === targetId);
-
         if (targetElement && targetElement.enterAnimation) {
           const targetDelay = targetElement.enterAnimation.delay;
           const overlayDelay = Math.max(targetDelay, el.enterAnimation?.delay || 0);
-
           return {
             ...el,
             x: targetElement.x,
@@ -154,12 +149,9 @@ export function alignStoryboardWithTimestamps(
       return el;
     });
 
-    currentWordIndex += sceneWordCount;
-    currentFrame += durationInFrames;
-    currentSeconds += durationSeconds;
-
     return {
       ...scene,
+      duration: durationSeconds,
       layout: {
         ...scene.layout,
         elements: finalElements,
@@ -178,7 +170,8 @@ export function alignStoryboardWithTimestamps(
 }
 
 /**
- * Searches for a target phrase in timestamps, then backtracks to the START of that spoken clause/sentence.
+ * Searches for a target phrase in timestamps, then backtracks to the START
+ * of that spoken clause/sentence. Timestamps are relative to scene start (0-based).
  */
 function findClauseStartWordIndex(
   timestamps: WordTimestamp[],

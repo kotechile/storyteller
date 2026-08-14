@@ -1,30 +1,116 @@
 import React from "react";
-import { Audio, Sequence, staticFile, useVideoConfig } from "remotion";
-import { ExplainerCompositionProps, CanvasElement } from "../../types/storyboard";
-import { alignStoryboardWithTimestamps } from "../../lib/audioSync";
 import {
-  sampleStoryboardManifest,
-  sampleWordTimestamps,
-} from "../../lib/sampleData";
+  Audio,
+  Sequence,
+  useVideoConfig,
+  interpolate,
+  useCurrentFrame,
+  Img,
+} from "remotion";
+import {
+  ExplainerCompositionProps,
+  SceneAudio,
+} from "../../types/storyboard";
+import { alignStoryboardWithTimestamps } from "../../lib/audioSync";
+import { sampleStoryboardManifest } from "../../lib/sampleData";
 import { SceneCanvas } from "./SceneCanvas";
+import { SubtitleOverlay } from "./SubtitleOverlay";
+import { TitleCardScene } from "./TitleCardScene";
+import { generateSfxCues, SFX_MAP } from "../../lib/sfxEngine";
+
+/** Opening title card duration: 4 seconds at 30fps */
+const TITLE_CARD_FRAMES = 120;
+/** Closing logo card duration: 3 seconds at 30fps */
+const CLOSING_LOGO_FRAMES = 90;
+
+/** Closing logo card — full-screen centered logo with fade-in */
+const ClosingLogoCard: React.FC<{ logoUrl: string; durationInFrames: number }> = ({
+  logoUrl,
+  durationInFrames,
+}) => {
+  const frame = useCurrentFrame();
+  const fadeIn = interpolate(frame, [0, 25], [0, 1], { extrapolateRight: "clamp" });
+  const fadeOut = interpolate(frame, [durationInFrames - 20, durationInFrames], [1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const opacity = Math.min(fadeIn, fadeOut);
+  const scale = interpolate(frame, [0, 30], [0.85, 1], { extrapolateRight: "clamp" });
+
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        backgroundColor: "#0f172a",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        opacity,
+      }}
+    >
+      <Img
+        src={logoUrl}
+        style={{
+          width: "30%",
+          maxHeight: "40%",
+          objectFit: "contain",
+          transform: `scale(${scale})`,
+          filter: "drop-shadow(0 4px 20px rgba(99, 102, 241, 0.3))",
+        }}
+      />
+    </div>
+  );
+};
 
 export const ExplainerStoryComposition: React.FC<ExplainerCompositionProps> = ({
   manifest = sampleStoryboardManifest,
-  wordTimestamps = sampleWordTimestamps,
-  audioUrl = "narration.mp3",
+  sceneAudio,
+  bgMusicUrl,
+  sfxCues: inputSfxCues,
+  camera,
+  lighting,
+  annotationConfig,
+  logoUrl,
+  audioBaseUrl,
 }) => {
   const { fps } = useVideoConfig();
 
+  const resolvedSceneAudio: SceneAudio[] = sceneAudio || [];
+
   const { alignedManifest, sceneBoundaries } = alignStoryboardWithTimestamps(
     manifest,
-    wordTimestamps,
+    resolvedSceneAudio,
     fps,
   );
 
-  const audioSrc =
-    audioUrl.startsWith("http") || audioUrl.startsWith("data:")
-      ? audioUrl
-      : staticFile(audioUrl || "narration.mp3");
+  const resolveAudioSrc = (url: string | undefined): string | undefined => {
+    if (!url) return undefined;
+    if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:") || url.startsWith("blob:")) {
+      return url;
+    }
+    const cleanPath = url.replace(/^\//, "");
+    const base = audioBaseUrl || (typeof window !== "undefined" ? window.location.origin : 'http://localhost:3001');
+    return `${base}/${cleanPath}`;
+  };
+
+  const sfxCues =
+    inputSfxCues || generateSfxCues(alignedManifest, sceneBoundaries);
+
+  const rawTitle = manifest.meta?.title || "";
+  const titleSceneData = alignedManifest.scenes.find((s: any) => s.sceneNumber === 0);
+  const titleSubtitle = titleSceneData?.narration || "";
+
+  const titleCardDuration = sceneBoundaries[0]?.durationInFrames || TITLE_CARD_FRAMES;
+
+  // Compute where the closing logo starts (after all content scenes)
+  const totalContentFrames = sceneBoundaries.length > 0
+    ? sceneBoundaries[sceneBoundaries.length - 1].startFrame + sceneBoundaries[sceneBoundaries.length - 1].durationInFrames
+    : 0;
+  const closingLogoStart = totalContentFrames;
+
+  // Filter out Scene 0 (title card) from regular scene rendering
+  const contentScenes = alignedManifest.scenes.filter((s: any) => s.sceneNumber !== 0);
 
   return (
     <div
@@ -37,113 +123,62 @@ export const ExplainerStoryComposition: React.FC<ExplainerCompositionProps> = ({
         overflow: "hidden",
       }}
     >
-      {/* Voiceover Audio */}
-      {audioSrc && <Audio src={audioSrc} />}
+      {/* Background Music Layer */}
+      {bgMusicUrl && (
+        <Audio
+          src={resolveAudioSrc(bgMusicUrl)}
+          volume={0.15}
+        />
+      )}
 
-      {/* Render Scenes via Sequence with Persistent Whiteboard Accumulation */}
-      {alignedManifest.scenes.map((scene, index) => {
-        const boundary = sceneBoundaries[index];
+      {/* Opening Title Card (Scene 0) — Prominently reveals company logo */}
+      <Sequence from={0} durationInFrames={titleCardDuration} name="Title Card">
+        <TitleCardScene
+          title={rawTitle}
+          subtitle={titleSubtitle}
+          durationInFrames={titleCardDuration}
+          logoUrl={logoUrl}
+        />
+      </Sequence>
+
+      {/* Sound Effects Engine Layer — aligned with scene boundaries */}
+      {sfxCues.map((cue, idx) => {
+        const soundUrl = SFX_MAP[cue.soundType];
+        if (!soundUrl) return null;
+        const fromFrame = Math.round((cue.startSeconds || 0) * fps);
+        const durationFrames = Math.max(
+          Math.round((cue.durationSeconds || 0.4) * fps),
+          1,
+        );
+        return (
+          <Sequence
+            key={`sfx_${cue.soundType}_${idx}`}
+            from={fromFrame}
+            durationInFrames={durationFrames}
+            name={`SFX: ${cue.soundType}`}
+          >
+            <Audio src={resolveAudioSrc(soundUrl) || soundUrl} volume={cue.volume || 0.3} />
+          </Sequence>
+        );
+      })}
+
+      {/* Render Content Scenes */}
+      {contentScenes.map((scene: any, index: number) => {
+        // Map back to original sceneBoundaries index
+        const origIdx = alignedManifest.scenes.indexOf(scene);
+        const boundary = sceneBoundaries[origIdx];
         if (!boundary) return null;
 
-        // Whiteboard Persistence: Accumulate drawn elements (images, text, connectors) from previous scenes.
-        // EXCLUDE previous highlight_overlays so glows fade away when new images arrive!
-        const accumulatedElementsMap = new Map<string, CanvasElement>();
-
-        for (let i = 0; i <= index; i++) {
-          const currentScene = alignedManifest.scenes[i];
-          if (currentScene.layout?.elements) {
-            // Check if current scene has connectors linking back to accumulated elements from previous scenes
-            const hasIncomingConnectorsToPast = currentScene.layout.elements.some((e) => {
-              if (e.type === 'connector') {
-                return (e.fromElementId && accumulatedElementsMap.has(e.fromElementId)) ||
-                       (e.toElementId && accumulatedElementsMap.has(e.toElementId));
-              }
-              return false;
-            });
-
-            // Automatic Canvas Clearing for Standalone Centerpieces & Chapter Transitions:
-            // If clearCanvas is explicitly set OR if a new scene (i > 0) is standalone (has no connectors linking to past scene elements),
-            // wipe past diagram elements so the new scene starts on a fresh, clean whiteboard!
-            const isStandaloneScene = i > 0 && !hasIncomingConnectorsToPast;
-            if (currentScene.layout.clearCanvas || currentScene.layout.canvasMode === 'clear_canvas' || isStandaloneScene) {
-              accumulatedElementsMap.clear();
-            }
-
-            // Check if current scene introduces a title text element
-            const hasNewTitle = currentScene.layout.elements.some((e) => e.type === 'text');
-            if (hasNewTitle && i > 0) {
-              // Clear previous scene title text elements so title boxes never overlap or superimpose!
-              for (const [key, existingEl] of accumulatedElementsMap.entries()) {
-                if (existingEl.type === 'text') {
-                  accumulatedElementsMap.delete(key);
-                }
-              }
-            }
-
-            for (const el of currentScene.layout.elements) {
-              // Deduplication & Overlap Prevention: If a new element occupies the same location or replaces an existing ID/concept, prune the old element!
-              for (const [existingId, existingEl] of accumulatedElementsMap.entries()) {
-                const isSameLocation = el.type === 'image' && existingEl.type === 'image' && Math.abs(existingEl.x - el.x) < 6 && Math.abs(existingEl.y - el.y) < 6;
-                const isSameId = existingId === el.id;
-                const isExplicitReplace = el.replacesElementId === existingId;
-
-                if ((isSameLocation && !isSameId) || isExplicitReplace) {
-                  accumulatedElementsMap.delete(existingId);
-                  // Prune any old connectors attached to the pruned element
-                  for (const [connKey, connEl] of accumulatedElementsMap.entries()) {
-                    if (
-                      connEl.type === 'connector' &&
-                      (connEl.fromElementId === existingId || connEl.toElementId === existingId)
-                    ) {
-                      accumulatedElementsMap.delete(connKey);
-                    }
-                  }
-                }
-              }
-
-              if (el.replacesElementId) {
-                const replacedId = el.replacesElementId;
-                accumulatedElementsMap.delete(replacedId);
-
-                // Prune any old connectors attached to the replaced element!
-                for (const [key, existingEl] of accumulatedElementsMap.entries()) {
-                  if (
-                    existingEl.type === 'connector' &&
-                    (existingEl.fromElementId === replacedId || existingEl.toElementId === replacedId)
-                  ) {
-                    accumulatedElementsMap.delete(key);
-                  }
-                }
-              }
-
-              if (i < index) {
-                // Ignore old highlight overlays from past scenes
-                if (el.type === 'highlight_overlay') continue;
-
-                // Keep past images, text, and connectors permanently visible on whiteboard
-                accumulatedElementsMap.set(el.id, {
-                  ...el,
-                  enterAnimation: {
-                    type: el.enterAnimation?.type || 'fade_in',
-                    duration: 0,
-                    delay: 0,
-                  },
-                });
-              } else {
-                // Current scene elements include active highlight overlays
-                accumulatedElementsMap.set(el.id, el);
-              }
-            }
-          }
+        const sa = resolvedSceneAudio.find(
+          (s) => s.sceneNumber === scene.sceneNumber
+        );
+        if (!sa || !sa.audioUrl) {
+          console.warn(`[Audio] Scene ${scene.sceneNumber}: no audio (sa=${!!sa}, audioUrl="${sa?.audioUrl || 'none'}")`);
         }
 
-        const persistentScene = {
-          ...scene,
-          layout: {
-            ...scene.layout,
-            elements: Array.from(accumulatedElementsMap.values()),
-          },
-        };
+        const audioSrc = resolveAudioSrc(sa?.audioUrl);
+        console.log(`[Audio] Scene ${scene.sceneNumber}: audioUrl="${sa?.audioUrl}", resolved="${audioSrc}", timestamps=${sa?.wordTimestamps?.length || 0}`);
+        const sceneDurationSec = boundary.durationInFrames / fps;
 
         return (
           <Sequence
@@ -152,10 +187,37 @@ export const ExplainerStoryComposition: React.FC<ExplainerCompositionProps> = ({
             durationInFrames={boundary.durationInFrames}
             name={`Scene ${scene.sceneNumber}`}
           >
-            <SceneCanvas scene={persistentScene} fps={fps} />
+            {audioSrc && <Audio src={audioSrc} volume={1} />}
+            <SceneCanvas
+              scene={scene}
+              fps={fps}
+              camera={camera}
+              lighting={lighting as any}
+              annotationConfig={annotationConfig}
+            />
+            {annotationConfig?.subtitle?.enabled && (
+              <SubtitleOverlay
+                wordTimestamps={sa?.wordTimestamps || []}
+                narration={scene.narration}
+                config={annotationConfig.subtitle}
+                fps={fps}
+                sceneDurationSec={sceneDurationSec}
+              />
+            )}
           </Sequence>
         );
       })}
+
+      {/* Closing Logo Card — after all content */}
+      {logoUrl && closingLogoStart > 0 && (
+        <Sequence
+          from={closingLogoStart}
+          durationInFrames={CLOSING_LOGO_FRAMES}
+          name="Closing Logo"
+        >
+          <ClosingLogoCard logoUrl={logoUrl} durationInFrames={CLOSING_LOGO_FRAMES} />
+        </Sequence>
+      )}
     </div>
   );
 };

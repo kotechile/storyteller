@@ -6,17 +6,23 @@ interface HighlightOverlayProps {
   element: CanvasElement;
   currentTimeMs: number;
   fps: number;
+  annotationConfig?: {
+    highlightColor?: string;
+    highlightBorderWidth?: number;
+  };
 }
 
-export const HighlightOverlay: React.FC<HighlightOverlayProps> = ({ element }) => {
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : null;
+}
+
+export const HighlightOverlay: React.FC<HighlightOverlayProps> = ({ element, annotationConfig }) => {
   const frame = useCurrentFrame();
 
   const delayFrames = element.enterAnimation?.delay ?? 0;
   const animDuration = element.enterAnimation?.duration ?? 10;
 
-  // Highlight pulse & auto-fade window:
-  // Fades in over animDuration (10 frames), stays active for stayFrames (45 frames / 1.5s), then smoothly fades out
-  // so ONLY the currently active/appearing box has a highlight glow at a time!
   const activeFrames = frame - delayFrames;
   if (activeFrames < 0) {
     return null;
@@ -42,6 +48,9 @@ export const HighlightOverlay: React.FC<HighlightOverlayProps> = ({ element }) =
   }
 
   const style = element.highlightOverlay?.style || 'glow';
+  const highlightColor = annotationConfig?.highlightColor || '#ef4444';
+  const borderWidth = annotationConfig?.highlightBorderWidth ?? 3;
+  const rgb = hexToRgb(highlightColor) || { r: 239, g: 68, b: 68 };
 
   // Glowing border encircling the complete card frame (image cutout + caption badge + margins)
   const padX = 2.0;
@@ -75,9 +84,9 @@ export const HighlightOverlay: React.FC<HighlightOverlayProps> = ({ element }) =
             top: `${overlayTop}%`,
             width: `${overlayWidth}%`,
             height: `${overlayHeight}%`,
-            border: '3px solid #3b82f6',
+            border: `${borderWidth}px solid ${highlightColor}`,
             borderRadius: 16,
-            boxShadow: '0 0 30px rgba(59, 130, 246, 0.8)',
+            boxShadow: `0 0 30px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.8)`,
             zIndex: (element.zIndex || 5) + 1,
             opacity,
             pointerEvents: 'none',
@@ -96,9 +105,9 @@ export const HighlightOverlay: React.FC<HighlightOverlayProps> = ({ element }) =
           top: `${overlayTop}%`,
           width: `${overlayWidth}%`,
           height: `${overlayHeight}%`,
-          border: '4px dashed #f59e0b',
+          border: `${borderWidth}px dashed ${highlightColor}`,
           borderRadius: 16,
-          boxShadow: '0 0 20px rgba(245, 158, 11, 0.5)',
+          boxShadow: `0 0 20px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5)`,
           opacity,
           zIndex: element.zIndex || 5,
           pointerEvents: 'none',
@@ -116,10 +125,10 @@ export const HighlightOverlay: React.FC<HighlightOverlayProps> = ({ element }) =
         top: `${overlayTop}%`,
         width: `${overlayWidth}%`,
         height: `${overlayHeight}%`,
-        border: '3px solid #3b82f6',
+        border: `${borderWidth}px solid ${highlightColor}`,
         borderRadius: 16,
-        backgroundColor: 'rgba(59, 130, 246, 0.10)',
-        boxShadow: '0 0 30px rgba(59, 130, 246, 0.5), inset 0 0 20px rgba(59, 130, 246, 0.15)',
+        backgroundColor: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.10)`,
+        boxShadow: `0 0 30px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5), inset 0 0 20px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`,
         opacity,
         zIndex: element.zIndex || 5,
         pointerEvents: 'none',

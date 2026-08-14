@@ -1,9 +1,22 @@
 node_modules
 dist
+dist-studio
+build
+out
 .DS_Store
 .env
-build
 
-# Ignore the output video from Git but not videos you import into src/.
-out
+# Generated TTS audio (timestamped, regenerated constantly)
+public/scene_*.mp3
 
+# Generated runtime state
+public/latest_manifest.json
+src/lib/latestStory.json
+
+# Python artifacts
+backend/__pycache__/
+*.pyc
+backend/venv/
+
+# Hermes agent local state
+.hermes/

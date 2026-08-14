@@ -1,8 +1,9 @@
 import React from 'react';
-import { interpolate, useCurrentFrame, staticFile } from 'remotion';
-import { CanvasElement } from '../../types/storyboard';
+import { interpolate, useCurrentFrame, staticFile, OffthreadVideo } from 'remotion';
+import { CanvasElement, RegionFocusEvent, DetectedRegion, AnnotationConfig, AnimationStrategy } from '../../types/storyboard';
 import { HighlightOverlay } from './HighlightOverlay';
 import { TransparentImageCutout } from './TransparentImageCutout';
+import { PointerLaser } from './PointerLaser';
 import { getAsset } from '../../lib/assetLibrary';
 
 interface ElementRendererProps {
@@ -10,6 +11,35 @@ interface ElementRendererProps {
   allSceneElements?: CanvasElement[];
   currentTimeMs: number;
   fps: number;
+  sceneRegionEvents?: RegionFocusEvent[];
+  sceneDetectedRegions?: DetectedRegion[];
+  /** Original image dimensions from Grounding DINO, for precise coordinate mapping */
+  sceneImageWidth?: number;
+  sceneImageHeight?: number;
+  annotationConfig?: AnnotationConfig;
+  /** Scene animation strategy (from StoryboardScene.animationStrategy) */
+  animationStrategy?: AnimationStrategy;
+  /** Whiteboard drawing mode — enables wipe-right and typewriter effects */
+  whiteboardMode?: boolean;
+  /** Overall drawing progress 0-1 for the entire scene (whiteboard mode) */
+  drawingProgress?: number;
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : null;
+}
+
+/**
+ * Computes the effective animation progress [0, 1] for an element
+ * based on its enterAnimation delay + duration.
+ */
+function useAnimProgress(delayFrames: number, animDuration: number): number {
+  const frame = useCurrentFrame();
+  if (frame < delayFrames) return 0;
+  const elapsed = frame - delayFrames;
+  if (elapsed >= animDuration) return 1;
+  return elapsed / animDuration;
 }
 
 export const ElementRenderer: React.FC<ElementRendererProps> = ({
@@ -17,12 +47,20 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
   allSceneElements = [],
   currentTimeMs,
   fps,
+  sceneRegionEvents,
+  sceneDetectedRegions,
+  sceneImageWidth,
+  sceneImageHeight,
+  annotationConfig,
+  whiteboardMode = false,
 }) => {
   const frame = useCurrentFrame();
 
   const delayFrames = element.enterAnimation?.delay ?? 0;
   const animDuration = element.enterAnimation?.duration ?? 15;
+  const animType = element.enterAnimation?.type || 'fade_in';
 
+  // Standard opacity + transform (fade_in, slide_up, scale_in, zoom_in)
   let opacity = 0;
   let transform = 'none';
 
@@ -30,7 +68,6 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
     const animProgress = Math.min((frame - delayFrames) / animDuration, 1);
     opacity = interpolate(animProgress, [0, 1], [0, 1], { extrapolateRight: 'clamp' });
 
-    const animType = element.enterAnimation?.type || 'fade_in';
     if (animType === 'slide_up') {
       const translateY = interpolate(animProgress, [0, 1], [25, 0], { extrapolateRight: 'clamp' });
       transform = `translateY(${translateY}px)`;
@@ -40,12 +77,16 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
     }
   }
 
+  // draw_in / wipe_right: use raw progress for stroke/clip-path
+  const drawProgress = useAnimProgress(delayFrames, animDuration);
+
+  // Highlight overlay
   if (element.type === 'highlight_overlay') {
     if (frame < delayFrames) return null;
-    return <HighlightOverlay element={element} currentTimeMs={currentTimeMs} fps={fps} />;
+    return <HighlightOverlay element={element} currentTimeMs={currentTimeMs} fps={fps} annotationConfig={annotationConfig} />;
   }
 
-  // Dynamic Directional Vector Connector linking source to destination elements
+  // ── Connector (SVG arrow with draw-in animation) ──
   if (element.type === 'connector') {
     const isDashed = element.connectorStyle === 'dashed';
     const hasArrow = element.connectorStyle !== 'line';
@@ -66,29 +107,25 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
       const deltaX = toCenter.x - fromCenter.x;
 
       if (deltaY > 12) {
-        // Flowing downward (fromEl above toEl)
-        // Tree Branching: Left arrows branch off source left corner, Right arrows off right corner
         if (deltaX < -10) {
-          startX = fromEl.x + 2; // Left bottom corner of source card
+          startX = fromEl.x + 2;
         } else if (deltaX > 10) {
-          startX = fromEl.x + fromEl.width - 2; // Right bottom corner of source card
+          startX = fromEl.x + fromEl.width - 2;
         } else {
-          startX = fromCenter.x; // Center bottom
+          startX = fromCenter.x;
         }
-        startY = fromEl.y + fromEl.height + (fromEl.content ? 6.5 : 1.5); // Starts cleanly below source caption badge!
+        startY = fromEl.y + fromEl.height + (fromEl.content ? 6.5 : 1.5);
         endX = toCenter.x;
-        endY = toEl.y - 2.0; // Stops cleanly above destination card
+        endY = toEl.y - 2.0;
       } else if (deltaX > 12) {
-        // Flowing left to right
-        startX = fromEl.x + fromEl.width; // right edge
+        startX = fromEl.x + fromEl.width;
         startY = fromCenter.y;
-        endX = toEl.x; // left edge
+        endX = toEl.x;
         endY = toCenter.y;
       } else if (deltaX < -12) {
-        // Flowing right to left
-        startX = fromEl.x; // left edge
+        startX = fromEl.x;
         startY = fromCenter.y;
-        endX = toEl.x + toEl.width; // right edge
+        endX = toEl.x + toEl.width;
         endY = toCenter.y;
       } else {
         startX = fromCenter.x;
@@ -107,21 +144,19 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
       }
     }
 
-    let midX = (startX + endX) / 2;
+    const midX = (startX + endX) / 2;
     let midY = (startY + endY) / 2;
 
     if (fromEl && toEl && (toEl.y - fromEl.y) > 12) {
-      // Downward flow: position floating label badge 55% down the open gap between bottom of source caption and top of child card
       midY = startY + (endY - startY) * 0.55;
     }
 
-    // Convert percentages (0-100) to 1920x1080 viewBox coordinates so 1 unit X = 1 unit Y
+    // Convert percentages (0-100) to 1920x1080 viewBox coordinates
     const startX_px = startX * 19.2;
     const startY_px = startY * 10.8;
     const endX_px = endX * 19.2;
     const endY_px = endY * 10.8;
 
-    // Calculate direction vector to pad line ends so arrowhead tip stops cleanly outside cards
     const dx = endX_px - startX_px;
     const dy = endY_px - startY_px;
     const dist = Math.hypot(dx, dy);
@@ -134,11 +169,19 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
     if (dist > 30) {
       const uX = dx / dist;
       const uY = dy / dist;
-      lineStartX = startX_px + uX * 8; // 8px gap outside source element
+      lineStartX = startX_px + uX * 8;
       lineStartY = startY_px + uY * 8;
-      lineEndX = endX_px - uX * 22; // 22px gap before destination element so arrowhead tip doesn't overlap image
+      lineEndX = endX_px - uX * 22;
       lineEndY = endY_px - uY * 22;
     }
+
+    // Approximate path length for draw-in animation
+    const pathLength = dist > 0 ? dist : 1;
+
+    // Connector label fade-in: start when line is ~70% drawn
+    const labelProgress = drawProgress > 0.7
+      ? (drawProgress - 0.7) / 0.3
+      : 0;
 
     return (
       <div
@@ -178,12 +221,17 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
             y2={lineEndY}
             stroke="#2563eb"
             strokeWidth="5"
-            strokeDasharray={isDashed ? '10,10' : undefined}
-            markerEnd={hasArrow ? `url(#arrowhead_${element.id})` : undefined}
+            strokeDasharray={isDashed ? '10,10' : `${pathLength}`}
+            strokeDashoffset={
+              drawProgress < 1 && animType === 'draw_in'
+                ? pathLength * (1 - drawProgress)
+                : '0'
+            }
+            markerEnd={hasArrow && drawProgress >= 0.95 ? `url(#arrowhead_${element.id})` : undefined}
           />
         </svg>
 
-        {/* Floating Connector Label */}
+        {/* Floating Connector Label — fades in after line is 70% drawn */}
         {(element.content || element.label) && (
           <div
             style={{
@@ -200,6 +248,7 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
               color: '#1e40af',
               boxShadow: '0 4px 14px rgba(37, 99, 235, 0.2)',
               whiteSpace: 'nowrap',
+              opacity: labelProgress,
             }}
           >
             {element.content || element.label}
@@ -209,9 +258,9 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
     );
   }
 
-  // Frameless Hybrid Image Element (Photorealistic Pictures & 3D Vectors)
+  // ── Image Element (static image, video, or SVG) ──
   if (element.type === 'image') {
-    let rawAsset = element.sourceAssetId || 'money';
+    const rawAsset = element.sourceAssetId || element.imageDescription || element.content || 'concept';
     let imageSrc = rawAsset;
     let resolvedSvgHtml: string | null = null;
 
@@ -220,7 +269,7 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
 
     if (isLocalFilePath) {
       imageSrc = rawAsset.startsWith('http') || rawAsset.startsWith('data:') ? rawAsset : staticFile(rawAsset);
-    } else if (rawAsset.startsWith('asset:')) {
+    } else {
       const resolvedAsset = getAsset(rawAsset);
       if (resolvedAsset && resolvedAsset.svgDataUrl) {
         imageSrc = resolvedAsset.svgDataUrl;
@@ -240,6 +289,17 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
       resolvedSvgHtml = decodeURIComponent(imageSrc.replace('data:image/svg+xml;utf8,', ''));
     }
 
+    const hasImageDimensions =
+      sceneImageWidth && sceneImageHeight && sceneImageWidth > 0 && sceneImageHeight > 0;
+
+    // Whiteboard wipe-right: clip-path animation
+    const wipeClipPath = whiteboardMode && (animType === 'wipe_right' || animType === 'draw_in')
+      ? `inset(0 ${(1 - drawProgress) * 100}% 0 0)`
+      : undefined;
+
+    // Video playback
+    const hasVideo = !!element.videoUrl;
+
     return (
       <div
         style={{
@@ -249,81 +309,192 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
           width: `${element.width}%`,
           height: `${element.height}%`,
           zIndex: element.zIndex || 1,
-          opacity,
+          opacity: whiteboardMode && animType === 'wipe_right' ? 1 : opacity,
           transform,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '4px',
-          overflow: 'visible',
+          display: hasVideo ? 'block' : 'flex',
+          flexDirection: hasVideo ? undefined : 'column',
+          alignItems: hasVideo ? undefined : 'center',
+          justifyContent: hasVideo ? undefined : 'center',
+          padding: hasVideo ? '0px' : (hasImageDimensions || annotationConfig?.showTitle === false) ? '0px' : '4px',
+          overflow: 'hidden',
+          clipPath: wipeClipPath,
           pointerEvents: opacity === 0 ? 'none' : 'auto',
         }}
       >
-        {/* Inline Graphic / Picture Asset */}
+        {/* Inline Graphic / Picture / Video Asset */}
         <div
           style={{
-            flex: 1,
             width: '100%',
+            height: '100%',
             position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            filter: 'drop-shadow(0 8px 16px rgba(15, 23, 42, 0.08))',
+            ...(hasVideo || annotationConfig?.showTitle === false
+              ? {}
+              : { filter: 'drop-shadow(0 8px 16px rgba(15, 23, 42, 0.08))' }),
           }}
         >
-          {resolvedSvgHtml ? (
+          {hasVideo ? (
+            <OffthreadVideo
+              src={element.videoUrl!}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+            />
+          ) : resolvedSvgHtml ? (
             <div
               style={{
                 width: '100%',
                 height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
                 overflow: 'hidden',
               }}
               dangerouslySetInnerHTML={{
                 __html: resolvedSvgHtml.replace(
                   /<svg([^>]*)>/i,
-                  '<svg$1 preserveAspectRatio="xMidYMid meet" style="max-width:100%; max-height:100%; object-fit:contain;">'
+                  '<svg$1 preserveAspectRatio="none" style="width:100%; height:100%;">'
                 ),
               }}
             />
-          ) : (
-            <TransparentImageCutout src={imageSrc} />
-          )}
-        </div>
+          ) : (imageSrc.startsWith('http') || imageSrc.startsWith('data:') || imageSrc.startsWith('/')) ? (
+            imageSrc.startsWith('data:image/') ? (
+              // eslint-disable-next-line @remotion/warn-native-media-tag -- data: URLs require native <img> (Remotion <Img> fails on data: URLs)
+              <img
+                src={imageSrc}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: hasImageDimensions ? 'fill' : 'contain',
+                  ...(annotationConfig?.showTitle === false
+                    ? {}
+                    : { filter: 'drop-shadow(0 8px 18px rgba(15, 23, 42, 0.12))' }),
+                }}
+              />
+            ) : (
+            <TransparentImageCutout
+              src={imageSrc}
+              preserveBackground
+              style={{ width: '100%', height: '100%', objectFit: hasImageDimensions ? 'fill' : 'contain' }}
+            />
+            )
+          ) : null}
 
-        {/* Presentation Caption */}
-        {element.content && (
-          <div
-            style={{
-              marginTop: '6px',
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-              border: '1.5px solid #cbd5e1',
-              borderRadius: '8px',
-              padding: '4px 10px',
-              fontSize: '14px',
-              fontWeight: 800,
-              color: '#0f172a',
-              textAlign: 'center',
-              lineHeight: 1.25,
-              whiteSpace: 'normal',
-              wordBreak: 'break-word',
-              maxWidth: '120%',
-              boxShadow: '0 4px 10px rgba(15, 23, 42, 0.05)',
-              flexShrink: 0,
-            }}
-          >
-            {element.content}
-          </div>
-        )}
+          {/* Element-level Highlight Overlay */}
+          {element.highlightOverlay && (
+            <HighlightOverlay
+              element={element}
+              currentTimeMs={currentTimeMs}
+              fps={fps}
+              annotationConfig={annotationConfig}
+            />
+          )}
+
+          {/* Region-level annotations — absolute overlay on image area */}
+          {sceneRegionEvents && sceneRegionEvents.length > 0 && (() => {
+            const currentTimeSec = currentTimeMs / 1000;
+            const elementEvents = sceneRegionEvents
+              .filter((ev) => ev.elementId === element.id)
+              .sort((a, b) => a.startSeconds - b.startSeconds);
+
+            const activeEvents = elementEvents.filter(
+              (ev) =>
+                currentTimeSec >= ev.startSeconds &&
+                currentTimeSec <= ev.endSeconds
+            );
+            if (activeEvents.length === 0) return null;
+            return activeEvents.map((activeEvent) => {
+              const detectedRegion = sceneDetectedRegions?.find(
+                (r) => r.id === activeEvent.regionId
+              );
+              if (!detectedRegion) return null;
+              const bb = detectedRegion.boundingBox;
+              const highlightColor = annotationConfig?.highlightColor || '#ef4444';
+              const borderWidth = annotationConfig?.highlightBorderWidth ?? 3;
+              const pointerColor = annotationConfig?.pointerColor || '#ef4444';
+              const showHighlights = annotationConfig?.showHighlights !== false;
+              const showPointer = annotationConfig?.showPointer !== false;
+              const rgb = hexToRgb(highlightColor) || { r: 239, g: 68, b: 68 };
+              
+              const centerX = bb.x + bb.width / 2;
+              const centerY = bb.y + bb.height / 2;
+
+              // Find previous event for smooth gliding
+              const activeIndex = elementEvents.findIndex((e) => e === activeEvent);
+              const prevEvent = activeIndex > 0 ? elementEvents[activeIndex - 1] : null;
+              let prevX = centerX;
+              let prevY = centerY;
+
+              if (prevEvent) {
+                const prevDetectedRegion = sceneDetectedRegions?.find(
+                  (r) => r.id === prevEvent.regionId
+                );
+                if (prevDetectedRegion) {
+                  prevX = prevDetectedRegion.boundingBox.x + prevDetectedRegion.boundingBox.width / 2;
+                  prevY = prevDetectedRegion.boundingBox.y + prevDetectedRegion.boundingBox.height / 2;
+                }
+              }
+
+              const eventStartFrame = Math.round(activeEvent.startSeconds * fps);
+              const eventActiveFrame = frame - eventStartFrame;
+
+              return (
+                <React.Fragment key={`${activeEvent.regionId}_${activeEvent.startSeconds}`}>
+                  {showHighlights && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: `${bb.x}%`,
+                        top: `${bb.y}%`,
+                        width: `${bb.width}%`,
+                        height: `${bb.height}%`,
+                        border: `${borderWidth}px solid ${highlightColor}`,
+                        borderRadius: 8,
+                        boxShadow: `0 0 24px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5)`,
+                        pointerEvents: 'none',
+                        zIndex: 25,
+                      }}
+                    />
+                  )}
+                  {showPointer && (
+                    <PointerLaser
+                      targetX={centerX}
+                      targetY={centerY}
+                      prevX={prevX}
+                      prevY={prevY}
+                      active={true}
+                      activeFrame={eventActiveFrame}
+                      transitionFrames={15}
+                      color={pointerColor}
+                    />
+                  )}
+                </React.Fragment>
+              );
+            });
+          })()}
+        </div>
       </div>
     );
   }
 
+  // ── Text Element ──
   if (element.type === 'text') {
-    const dynamicTitleFontSize = Math.max(22, Math.min(38, Math.round(element.width * 0.65 + element.height * 0.4)));
+    if (annotationConfig?.showTitle === false) {
+      return null;
+    }
+
+    // Split title:subtitle if colon exists
+    const rawContent = element.content || '';
+    const colonIdx = rawContent.indexOf(':');
+    const hasSubtitle = colonIdx > 0 && colonIdx < rawContent.length - 1;
+    const title = hasSubtitle ? rawContent.substring(0, colonIdx).trim() : rawContent;
+    const subtitle = hasSubtitle ? rawContent.substring(colonIdx + 1).trim() : '';
+
+    // Whiteboard typewriter: show progressively more characters
+    const displayedTitle = whiteboardMode
+      ? title.substring(0, Math.ceil(title.length * drawProgress))
+      : title;
+    const displayedSubtitle = whiteboardMode && hasSubtitle
+      ? subtitle.substring(0, Math.ceil(subtitle.length * Math.max(0, drawProgress - 0.3) / 0.7))
+      : subtitle;
 
     return (
       <div
@@ -332,31 +503,39 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
           left: `${element.x}%`,
           top: `${element.y}%`,
           width: `${element.width}%`,
-          height: `${element.height}%`,
           zIndex: element.zIndex || 10,
           opacity,
           transform,
-          fontFamily: 'Inter, system-ui, sans-serif',
+          fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
           display: 'flex',
-          alignItems: 'center',
-          pointerEvents: opacity === 0 ? 'none' : 'auto',
+          flexDirection: 'column',
+          justifyContent: 'flex-start',
+          pointerEvents: 'none',
         }}
       >
-        <div
-          style={{
-            backgroundColor: '#ffffff',
-            border: '2.5px solid #3b82f6',
-            borderRadius: '14px',
-            padding: '10px 24px',
-            boxShadow: '0 8px 20px -3px rgba(59, 130, 246, 0.18)',
-            fontSize: `${dynamicTitleFontSize}px`,
-            fontWeight: 800,
-            color: '#0f172a',
-            letterSpacing: '-0.01em',
-          }}
-        >
-          {element.content}
-        </div>
+        <span style={{
+          fontSize: '44px',
+          fontWeight: 700,
+          color: '#0f172a',
+          letterSpacing: '-0.5px',
+          lineHeight: 1.15,
+        }}>
+          {displayedTitle}
+          {whiteboardMode && drawProgress < 1 && drawProgress > 0 && (
+            <span style={{ opacity: 0.6, animation: 'none' }}>|</span>
+          )}
+        </span>
+        {hasSubtitle && (
+          <span style={{
+            fontSize: '20px',
+            fontWeight: 400,
+            color: '#64748b',
+            lineHeight: 1.4,
+            marginTop: '10px',
+          }}>
+            {displayedSubtitle}
+          </span>
+        )}
       </div>
     );
   }

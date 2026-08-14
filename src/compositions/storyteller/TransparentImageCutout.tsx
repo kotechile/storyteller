@@ -4,20 +4,34 @@ import { Img } from 'remotion';
 interface TransparentImageCutoutProps {
   src: string;
   style?: React.CSSProperties;
+  preserveBackground?: boolean;
 }
 
 /**
  * Removes white and light-gray background pixels from an image in real-time,
  * producing a 100% true transparent PNG cutout floating seamlessly on canvas.
+ * Set preserveBackground=true to skip transparency (for infographic diagrams).
  */
-export const TransparentImageCutout: React.FC<TransparentImageCutoutProps> = ({ src, style }) => {
+export const TransparentImageCutout: React.FC<TransparentImageCutoutProps> = ({ src, style, preserveBackground = false }) => {
   const [transparentDataUrl, setTransparentDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    // SVG data URLs or already transparent images don't need background removal
-    if (src.startsWith('data:image/svg+xml')) {
+    // If src is empty or invalid, avoid setting image src
+    if (!src || src.trim() === '') {
+      setTransparentDataUrl(null);
+      return;
+    }
+
+    // Check if src is valid URL or data URI before loading Image
+    if (!src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('/')) {
+      setTransparentDataUrl(null);
+      return;
+    }
+
+    // SVG data URLs or preserveBackground mode don't need background removal
+    if (src.startsWith('data:image/svg+xml') || preserveBackground) {
       setTransparentDataUrl(src);
       return;
     }
@@ -78,9 +92,12 @@ export const TransparentImageCutout: React.FC<TransparentImageCutoutProps> = ({ 
     };
   }, [src]);
 
+  const finalSrc = transparentDataUrl || src;
+  if (!finalSrc || finalSrc.trim() === '') return null;
+
   return (
     <Img
-      src={transparentDataUrl || src}
+      src={finalSrc}
       style={{
         maxWidth: '100%',
         maxHeight: '100%',

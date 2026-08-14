@@ -6,8 +6,20 @@
  */
 
 import { Config } from "@remotion/cli/config";
-import { enableTailwind } from '@remotion/tailwind-v4';
 
 Config.setVideoImageFormat("jpeg");
 Config.setOverwriteOutput(true);
-Config.overrideWebpackConfig(enableTailwind);
+
+Config.overrideWebpackConfig((config) => {
+  return {
+    ...config,
+    resolve: {
+      ...(config as any).resolve,
+      fallback: {
+        ...((config as any).resolve?.fallback || {}),
+        fs: false,
+        path: false,
+      },
+    },
+  };
+});

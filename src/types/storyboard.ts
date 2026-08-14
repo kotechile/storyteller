@@ -48,10 +48,17 @@ export interface ArticleData {
 
 export type ElementType = 'image' | 'text' | 'highlight_overlay' | 'connector';
 
+export type AnimationStrategy = 'static' | 'programmatic' | 'image_to_video' | 'text_to_video';
+
+export type EnterAnimationType = 'fade_in' | 'slide_up' | 'scale_in' | 'zoom_in' | 'draw_in' | 'wipe_right';
+export type SequencingMode = 'immediate' | 'staggered' | 'progressive';
+
 export interface ElementAnimation {
-  type: 'fade_in' | 'slide_up' | 'scale_in' | 'zoom_in';
+  type: EnterAnimationType;
   duration: number; // In frames (at 30fps)
   delay: number; // Delay within scene in frames
+  sequencing?: SequencingMode; // How elements sequence within the scene
+  staggerOffset?: number; // Frames between each element when sequencing='staggered' (default: 10)
 }
 
 export interface HighlightOverlayConfig {
@@ -78,11 +85,36 @@ export interface CanvasElement {
   width: number; // 0-100% canvas width
   height: number; // 0-100% canvas height
   zIndex: number;
+  /** URL to a generated video (image-to-video or text-to-video). When set, renders as <OffthreadVideo> instead of static <img>. */
+  videoUrl?: string;
   enterAnimation?: ElementAnimation;
   highlightOverlay?: HighlightOverlayConfig;
 }
 
-export type TriggerAction = 'reveal' | 'highlight_off' | 'highlight_on' | 'focus_zoom';
+export interface DetectedRegion {
+  id: string; // "region_server_icon"
+  label: string; // "blue server icon"
+  boundingBox: {
+    x: number; // 0-100%, relative to the IMAGE element (not canvas)
+    y: number;
+    width: number;
+    height: number;
+  };
+  confidence: number; // 0-1
+}
+
+/** A timed focus event: at time T, highlight region R on element E */
+export interface RegionFocusEvent {
+  regionId: string;
+  elementId: string; // CanvasElement.id of the image this region belongs to
+  startSeconds: number; // When to start the highlight
+  endSeconds: number; // When to stop the highlight
+  label: string; // Display label
+  pointerEnabled: boolean; // Whether to show the moving pointer for this event
+  transition: 'instant' | 'smooth'; // Pointer movement style between regions
+}
+
+export type TriggerAction = 'reveal' | 'highlight_off' | 'highlight_on' | 'focus_zoom' | 'focus_region';
 
 export interface SyncHint {
   text: string; // Substring of narration to sync with
@@ -102,6 +134,10 @@ export interface StoryboardScene {
   sceneNumber: number;
   narration: string;
   duration: number; // Estimated seconds
+  /** Scene animation classification — determines render path (programmatic, image_to_video, text_to_video, static) */
+  animationStrategy?: AnimationStrategy;
+  /** Custom video generation prompt — overrides imageDescription for text_to_video/image_to_video scenes */
+  videoPrompt?: string;
   layout: {
     background: SceneBackground;
     clearCanvas?: boolean; // If true, wipes previous scene elements clean for a fresh chapter/finale
@@ -109,10 +145,24 @@ export interface StoryboardScene {
     elements: CanvasElement[];
   };
   syncHints: SyncHint[];
+  detectedRegions?: DetectedRegion[];
+  regionFocusEvents?: RegionFocusEvent[];
+  /** Original image dimensions from Grounding DINO, for aspect-ratio alignment */
+  detectedImageWidth?: number;
+  detectedImageHeight?: number;
+  /** Per-scene camera instruction (overrides composition-level camera for this scene) */
+  camera?: CameraInstruction;
 }
 
-export type ImageStylePreset = 'photo-realistic' | 'illustration' | 'whiteboard' | 'chalk-drawing';
+export type ImageStylePreset = 'photo-realistic' | 'illustration' | 'whiteboard' | 'chalkboard' | 'chalk-drawing';
 export type StoryStylePreset = ImageStylePreset | 'cinematic' | 'flat-vector' | 'infographic';
+
+export interface CameraInstruction {
+  preset: 'slow_dolly_in' | 'macro_focus_pull' | 'dutch_angle' | 'crane_up' | 'static' | 'push_to_element' | 'pan_across' | 'parallax_reveal';
+  intensity: number;
+  durationFrames: number;
+  targetElementId?: string;
+}
 
 export interface StoryboardManifest {
   meta: {
@@ -141,12 +191,67 @@ export interface TTSOutput {
   duration: number; // In seconds
 }
 
+/** Per-scene audio produced by synthesizePerSceneSpeech() */
+export interface SceneAudio {
+  sceneNumber: number;
+  audioUrl: string;         // e.g. "scene_1.mp3"
+  wordTimestamps: WordTimestamp[];  // isolated to this scene, times relative to 0
+  durationSeconds: number;  // from ElevenLabs
+}
+
+export interface SubtitleConfig {
+  /** Enable subtitle rendering */
+  enabled?: boolean;
+  /** Font size in px (default 32) */
+  fontSize?: number;
+  /** Text color hex (default '#FFFFFF') */
+  color?: string;
+  /** Background bar color behind text (default 'rgba(0,0,0,0.65)') */
+  backgroundColor?: string;
+  /** Whether to highlight the current spoken word in a different color */
+  highlightActiveWord?: boolean;
+  /** Color for the currently spoken word (defaults to color) */
+  activeWordColor?: string;
+}
+
+export interface AnnotationConfig {
+  /** Highlight box border color (hex) */
+  highlightColor?: string;
+  /** Highlight box border width in px */
+  highlightBorderWidth?: number;
+  /** Laser pointer dot color (hex) */
+  pointerColor?: string;
+  /** Show highlight boxes at all */
+  showHighlights?: boolean;
+  /** Show laser pointer dot */
+  showPointer?: boolean;
+  /** Show slide title and subtitle overlay */
+  showTitle?: boolean;
+  /** Subtitle configuration */
+  subtitle?: SubtitleConfig;
+}
+
 export interface ExplainerCompositionProps {
   articleUrl?: string;
   manifest?: StoryboardManifest;
-  wordTimestamps?: WordTimestamp[];
-  audioUrl?: string;
+  sceneAudio?: SceneAudio[];
+  bgMusicUrl?: string;
+  bgMusicTrackId?: string;
+  sfxCues?: Array<{
+    sceneNumber: number;
+    startSeconds: number;
+    durationSeconds: number;
+    soundType: string;
+    volume: number;
+  }>;
+  camera?: CameraInstruction;
+  lighting?: string;
   fps?: number;
+  annotationConfig?: AnnotationConfig;
+  /** Optional company logo URL — displayed in Scene 1 and closing card */
+  logoUrl?: string;
+  /** Base URL for serving audio files (e.g. http://localhost:3001) */
+  audioBaseUrl?: string;
 }
 
 // ==========================================
@@ -184,9 +289,11 @@ export const articleAssetSchema = z.object({
 });
 
 export const elementAnimationSchema = z.object({
-  type: z.enum(['fade_in', 'slide_up', 'scale_in', 'zoom_in']),
+  type: z.enum(['fade_in', 'slide_up', 'scale_in', 'zoom_in', 'draw_in', 'wipe_right']),
   duration: z.number(),
   delay: z.number(),
+  sequencing: z.enum(['immediate', 'staggered', 'progressive']).optional(),
+  staggerOffset: z.number().optional(),
 });
 
 export const highlightOverlayConfigSchema = z.object({
@@ -213,13 +320,37 @@ export const canvasElementSchema = z.object({
   width: z.number(),
   height: z.number(),
   zIndex: z.number(),
+  videoUrl: z.string().optional(),
   enterAnimation: elementAnimationSchema.optional(),
   highlightOverlay: highlightOverlayConfigSchema.optional(),
+}); 
+
+export const detectedRegionSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  boundingBox: z.object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+  }),
+  confidence: z.number(),
+});
+
+export const regionFocusEventSchema = z.object({
+  regionId: z.string(),
+  elementId: z.string(),
+  startSeconds: z.number(),
+  endSeconds: z.number(),
+  label: z.string(),
+  pointerEnabled: z.boolean(),
+  // eslint-disable-next-line @remotion/non-pure-animation -- Zod schema, not a component
+  transition: z.enum(['instant', 'smooth']),
 });
 
 export const syncHintSchema = z.object({
   text: z.string(),
-  triggerAction: z.enum(['reveal', 'highlight_off', 'highlight_on', 'focus_zoom']),
+  triggerAction: z.enum(['reveal', 'highlight_off', 'highlight_on', 'focus_zoom', 'focus_region']),
   targetElementId: z.string(),
   targetRegionId: z.string().optional(),
   audioStart: z.number().optional(),
@@ -235,18 +366,32 @@ export const storyboardSceneSchema = z.object({
   sceneNumber: z.number(),
   narration: z.string(),
   duration: z.number(),
+  animationStrategy: z.enum(['static', 'programmatic', 'image_to_video', 'text_to_video']).optional(),
+  videoPrompt: z.string().optional(),
   layout: z.object({
     background: sceneBackgroundSchema,
+    clearCanvas: z.boolean().default(true),
+    canvasMode: z.enum(['accumulate', 'clear_canvas']).default('clear_canvas'),
     elements: z.array(canvasElementSchema),
   }),
   syncHints: z.array(syncHintSchema),
+  detectedRegions: z.array(detectedRegionSchema).optional(),
+  regionFocusEvents: z.array(regionFocusEventSchema).optional(),
+  detectedImageWidth: z.number().optional(),
+  detectedImageHeight: z.number().optional(),
+  camera: z.object({
+    preset: z.enum(['slow_dolly_in', 'macro_focus_pull', 'dutch_angle', 'crane_up', 'static', 'push_to_element', 'pan_across', 'parallax_reveal']),
+    intensity: z.number(),
+    durationFrames: z.number(),
+    targetElementId: z.string().optional(),
+  }).optional(),
 });
 
 export const storyboardManifestSchema = z.object({
   meta: z.object({
     title: z.string(),
     targetDuration: z.number(),
-    stylePreset: z.enum(['photo-realistic', 'illustration', 'chalk-drawing', 'cinematic', 'flat-vector', 'whiteboard', 'infographic']),
+    stylePreset: z.enum(['photo-realistic', 'illustration', 'chalkboard', 'chalk-drawing', 'cinematic', 'flat-vector', 'whiteboard', 'infographic']),
     primaryColor: z.string().optional(),
     fontFamily: z.string().optional(),
   }),
@@ -259,10 +404,16 @@ export const wordTimestampSchema = z.object({
   end: z.number(),
 });
 
+export const sceneAudioSchema = z.object({
+  sceneNumber: z.number(),
+  audioUrl: z.string(),
+  wordTimestamps: z.array(wordTimestampSchema),
+  durationSeconds: z.number(),
+});
+
 export const explainerCompositionSchema = z.object({
   articleUrl: z.string().optional(),
   manifest: storyboardManifestSchema.optional(),
-  wordTimestamps: z.array(wordTimestampSchema).optional(),
-  audioUrl: z.string().optional(),
+  sceneAudio: z.array(sceneAudioSchema).optional(),
   fps: z.number().optional(),
 });

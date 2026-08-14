@@ -1,5 +1,7 @@
+import { assembleNanoBananaPrompt, parsePromptToComponents } from './nanoBananaPromptEngine';
 import { resolveImageModel } from './supabaseClient';
 import { ImageStylePreset } from '../types/storyboard';
+import { fetchWithRetry } from './ingest';
 
 export interface FluxGenerationOptions {
   prompt: string;
@@ -8,6 +10,8 @@ export interface FluxGenerationOptions {
   width?: number;
   height?: number;
   aspectRatio?: '16:9' | '1:1' | '9:16';
+  infographicLabels?: string[];
+  referenceImage?: string;
 }
 
 export interface FluxGenerationResult {
@@ -17,52 +21,123 @@ export interface FluxGenerationResult {
 }
 
 /**
- * Builds a prompt tailored to the specified image style preset:
- * 1) photo-realistic: High resolution 35mm photography
- * 2) illustration: Vibrant clean graphic design digital vector illustration
- * 3) whiteboard: Clean hand-drawn dry-erase whiteboard marker line art on seamless white background
+ * Builds a structured prompt for Nano Banana Pro API following the exact format:
+ * [Subject] + [Action] + [Location/context] + [Composition] + [Style]
+ * plus hardcoded positive style constraints, infographic labels, and character reference anchors.
  */
-export function buildStylePrompt(prompt: string, stylePreset: ImageStylePreset | string = 'photo-realistic'): string {
-  const normalizedStyle = stylePreset === 'chalk-drawing' ? 'whiteboard' : stylePreset;
-
-  switch (normalizedStyle) {
-    case 'illustration':
-      return `isolated 3D digital vector illustration of ${prompt}, modern graphic design icon style, rich flat colors, smooth gradients, crisp outlines, isolated on pure solid white background hex #ffffff, no background elements, no vignetting, no gray border, high resolution`;
-    case 'whiteboard':
-      return `simple clean whiteboard marker line drawing of ${prompt}, hand-drawn with black and navy blue dry-erase markers on a pure seamless solid white background hex #ffffff, minimalist visual diagram sketch, crisp marker lines, isolated drawing on white background, no room photo, no slate, no background shadows, no vignetting, no gray border frame`;
-    case 'photo-realistic':
-    default:
-      return `isolated high-definition studio photograph of ${prompt}, placed on pure solid white background hex #ffffff, high key studio lighting, sharp focus, vibrant natural color palette, crisp edges, no surrounding room, no background elements, no vignetting, no gray border, 8k resolution`;
+export function buildStylePrompt(
+  prompt: string,
+  stylePreset: ImageStylePreset | string = 'illustration',
+  infographicLabels: string[] = [],
+  referenceImage?: string
+): string {
+  const components = parsePromptToComponents(prompt, stylePreset);
+  if (infographicLabels && infographicLabels.length > 0) {
+    components.infographicLabels = infographicLabels;
   }
+  if (referenceImage) {
+    components.referenceImage = referenceImage;
+  }
+  return assembleNanoBananaPrompt(components, stylePreset);
 }
 
 /**
- * Generates high-definition images using Flux AI with parameterized style presets.
+ * Generates images using the configured image model from Supabase llm_models_image table.
+ * Optimized for Nano Banana Pro / Gemini / Flux image generation.
  */
 export async function generateFluxImage(
   options: FluxGenerationOptions
 ): Promise<FluxGenerationResult> {
-  const imageConfig = await resolveImageModel('flux');
-  const stylePreset = options.stylePreset || 'photo-realistic';
-  const detailedPrompt = buildStylePrompt(options.prompt, stylePreset);
+  const imageConfig = await resolveImageModel(undefined, 'diagram_creator');
+  console.log(`[FluxImageGen] Resolved image model from Supabase: "${imageConfig.modelName}" (provider: ${imageConfig.provider}, apiKey: ${imageConfig.apiKey ? 'PRESENT' : 'MISSING'}, baseUrl: ${imageConfig.baseUrl || 'N/A'})`);
+  const stylePreset = options.stylePreset || 'illustration';
+  const detailedPrompt = buildStylePrompt(
+    options.prompt,
+    stylePreset,
+    options.infographicLabels,
+    options.referenceImage
+  );
+  const provider = (imageConfig.provider || 'pollinations').toLowerCase();
 
-  // 1. Try paid Flux / Kie.ai API if key exists
-  if (imageConfig.apiKey) {
+  // 1. Google/Gemini image generation
+  if (provider === 'google' || provider === 'gemini' || provider === 'imagen' || provider === 'vertex') {
+    if (imageConfig.apiKey) {
+      try {
+        const result = await generateGoogleImage(detailedPrompt, imageConfig.apiKey, imageConfig.modelName);
+        if (result) {
+          return {
+            imageUrl: result.imageUrl,
+            modelUsed: imageConfig.modelName,
+            provider: result.provider,
+          };
+        }
+      } catch (err) {
+        console.warn('[FluxImageGen] Google image generation failed:', err);
+      }
+    }
+  }
+
+  // 2. OpenRouter (supports Flux, Nano Banana 2, DALL-E, etc.)
+  if (provider === 'openrouter' && imageConfig.apiKey) {
     try {
-      const response = await fetch('https://api.kie.ai/v1/images/generations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${imageConfig.apiKey}`,
+      const response = await fetchWithRetry(
+        'https://openrouter.ai/api/v1/images/generations',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${imageConfig.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: imageConfig.modelName,
+            prompt: detailedPrompt,
+            n: 1,
+            size: `${options.width || 1920}x${options.height || 1080}`,
+          }),
+          signal: AbortSignal.timeout(60000),
         },
-        body: JSON.stringify({
-          model: imageConfig.modelName,
-          prompt: detailedPrompt,
-          aspect_ratio: options.aspectRatio || '1:1',
-          width: options.width || 1024,
-          height: options.height || 1024,
-        }),
-      });
+        2,
+        1000
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const imageUrl = data.data?.[0]?.url || data.image_url || data.url;
+        if (imageUrl) {
+          return {
+            imageUrl,
+            modelUsed: imageConfig.modelName,
+            provider: 'openrouter',
+          };
+        }
+      }
+    } catch (err) {
+      console.warn(`[FluxImageGen] OpenRouter image gen failed for ${imageConfig.modelName}:`, err);
+    }
+  }
+
+  // 3. Kie.ai (Flux / Nano Banana / Imagen via Kie.ai API)
+  if ((provider.includes('kie') || provider.includes('flux') || provider.includes('banana')) && imageConfig.apiKey) {
+    try {
+      const baseUrl = imageConfig.baseUrl || 'https://api.kie.ai/v1';
+      const response = await fetchWithRetry(
+        `${baseUrl}/images/generations`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${imageConfig.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: imageConfig.modelName,
+            prompt: detailedPrompt,
+            aspect_ratio: options.aspectRatio || '16:9',
+          }),
+          signal: AbortSignal.timeout(60000),
+        },
+        2,
+        1000
+      );
 
       if (response.ok) {
         const data = await response.json();
@@ -76,13 +151,52 @@ export async function generateFluxImage(
         }
       }
     } catch (err) {
-      console.warn('[FluxImageGen] Paid Flux API call failed, using Pollinations 1024x1024 Flux engine:', err);
+      console.warn('[FluxImageGen] Kie.ai image gen failed:', err);
     }
   }
 
-  // 2. Square 1024x1024 AI Generation API (Pollinations Flux Engine)
-  const reqWidth = options.width || 1024;
-  const reqHeight = options.height || 1024;
+  // 4. Generic OpenAI-compatible endpoint (custom baseUrl)
+  if (imageConfig.apiKey && imageConfig.baseUrl) {
+    try {
+      const response = await fetchWithRetry(
+        `${imageConfig.baseUrl}/images/generations`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${imageConfig.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: imageConfig.modelName,
+            prompt: detailedPrompt,
+            n: 1,
+            size: `${options.width || 1920}x${options.height || 1080}`,
+          }),
+          signal: AbortSignal.timeout(60000),
+        },
+        2,
+        1000
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const imageUrl = data.data?.[0]?.url || data.image_url || data.url;
+        if (imageUrl) {
+          return {
+            imageUrl,
+            modelUsed: imageConfig.modelName,
+            provider: imageConfig.provider,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn(`[FluxImageGen] Generic image gen failed for ${imageConfig.modelName}:`, err);
+    }
+  }
+
+  // 5. Fallback: Free Pollinations (always available, no API key needed)
+  const reqWidth = options.width || 1920;
+  const reqHeight = options.height || 1080;
   const encodedPrompt = encodeURIComponent(detailedPrompt);
   const generatedUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${reqWidth}&height=${reqHeight}&model=flux&nologo=true&seed=${Math.floor(Math.random() * 10000)}`;
 
@@ -139,4 +253,65 @@ export function createTopicVectorSvg(
       ? btoa(unescape(encodeURIComponent(svgContent)))
       : Buffer.from(svgContent).toString('base64');
   return `data:image/svg+xml;base64,${base64}`;
+}
+
+// ═══════════════════════════════════════════════════
+// GOOGLE IMAGEN 3 / GEMINI IMAGE GENERATION
+// ═══════════════════════════════════════════════════
+
+/**
+ * Generates an image using Google's Gemini image generation API.
+ * Uses the resolved model name from Supabase (e.g. gemini-3-pro-image).
+ * Imagen 3 is skipped — it requires a Vertex AI service account, not an API key.
+ */
+export async function generateGoogleImage(
+  prompt: string,
+  apiKey: string,
+  modelName?: string
+): Promise<{ imageUrl: string; provider: string } | null> {
+  const geminiModel = modelName || 'gemini-2.0-flash-exp-image-generation';
+
+  try {
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
+    const response = await fetchWithRetry(
+      geminiUrl,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: `Generate a clean diagram image: ${prompt}` }],
+          }],
+          generationConfig: {
+            responseModalities: ['Text', 'Image'],
+            imageConfig: {
+              aspectRatio: '16:9',
+            },
+          },
+        }),
+        signal: AbortSignal.timeout(60000),
+      },
+      2,
+      2000
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      for (const part of data.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData?.data) {
+          return {
+            imageUrl: `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`,
+            provider: 'gemini',
+          };
+        }
+      }
+    } else {
+      const text = await response.text().catch(() => '');
+      console.warn(`[GoogleImage] Gemini ${response.status} for ${geminiModel}: ${text.substring(0, 200)}`);
+    }
+  } catch (err) {
+    console.warn(`[GoogleImage] Gemini call failed for ${geminiModel}:`, err);
+  }
+
+  return null;
 }

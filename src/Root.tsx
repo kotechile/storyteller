@@ -7,8 +7,6 @@ import {
   DEFAULT_WIDTH,
   DEFAULT_HEIGHT,
   DEFAULT_FPS,
-  DEFAULT_DURATION_IN_FRAMES,
-  COLORS,
 } from "./config";
 
 import { TitleCard, TitleCardSchema } from "./compositions/TitleCard";
@@ -22,25 +20,27 @@ import { CallToAction, CallToActionSchema } from "./compositions/CallToAction";
 
 import { ExplainerStoryComposition } from "./compositions/storyteller/ExplainerStoryComposition";
 import { explainerCompositionSchema } from "./types/storyboard";
-import { sampleStoryboardManifest, sampleWordTimestamps } from "./lib/sampleData";
 
 loadFont();
 
-// Load latest generated story if present on disk
-let initialManifest = sampleStoryboardManifest;
-let initialWordTimestamps = sampleWordTimestamps;
-let initialAudioUrl = "narration.mp3";
-
-try {
-  const latestStory = require('./lib/latestStory.json');
-  if (latestStory && latestStory.manifest) {
-    initialManifest = latestStory.manifest;
-    if (latestStory.wordTimestamps) initialWordTimestamps = latestStory.wordTimestamps;
-    if (latestStory.audioUrl) initialAudioUrl = latestStory.audioUrl;
-  }
-} catch {
-  // Use sample fallback if latestStory.json not found
+// ── Load latest pipeline output for Remotion Studio preview ──
+// Falls back to minimal placeholder if pipeline hasn't been run yet.
+function loadPipelineDefaults(): any {
+  try {
+    const data = require("./lib/latestStory.json");
+    if (data?.manifest) {
+      return {
+        articleUrl: data.articleUrl || "",
+        manifest: data.manifest,
+        sceneAudio: data.sceneAudio || undefined,
+        bgMusicUrl: data.bgMusicUrl || undefined,
+        sfxCues: data.sfxCues || undefined,
+      };
+    }
+  } catch {}
+  return null;
 }
+const pipelineProps = loadPipelineDefaults();
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -52,110 +52,119 @@ export const RemotionRoot: React.FC = () => {
         fps={DEFAULT_FPS}
         width={DEFAULT_WIDTH}
         height={DEFAULT_HEIGHT}
+        durationInFrames={5400}
         schema={explainerCompositionSchema}
         calculateMetadata={async ({ props }: { props: any }) => {
           let durationSeconds = 45;
-          if (props.wordTimestamps && props.wordTimestamps.length > 0) {
-            const lastWord = props.wordTimestamps[props.wordTimestamps.length - 1];
-            durationSeconds = lastWord.end + 1.5;
-          } else if (props.manifest?.scenes) {
-            durationSeconds = props.manifest.scenes.reduce(
-              (acc: number, s: any) => acc + (s.duration || 4),
+
+          // Per-scene audio: sum of ElevenLabs-reported durations
+          if (props.sceneAudio && props.sceneAudio.length > 0) {
+            const total = props.sceneAudio.reduce(
+              (acc: number, sa: any) => acc + (Number(sa.durationSeconds) || 0),
               0
             );
+            if (total > 0) durationSeconds = total;
           }
+          // Fallback: sum scene durations from manifest
+          else if (props.manifest?.scenes?.length > 0) {
+            const total = props.manifest.scenes.reduce(
+              (acc: number, s: any) => acc + (Number(s.duration) || 12),
+              0
+            );
+            if (total > 0) durationSeconds = total;
+          }
+          const frames = Math.max(Math.ceil((durationSeconds + 4 + 3) * DEFAULT_FPS), 120);
           return {
-            durationInFrames: Math.max(Math.ceil(durationSeconds * DEFAULT_FPS), 120),
+            durationInFrames: isNaN(frames) ? 120 : frames,
           };
         }}
-        defaultProps={{
-          articleUrl: "https://giniloh.com/smart-ways-to-invest-an-extra-500-a-day/",
-          manifest: initialManifest,
-          wordTimestamps: initialWordTimestamps,
-          audioUrl: initialAudioUrl,
+        defaultProps={pipelineProps || {
+          articleUrl: "",
+          manifest: {
+            meta: {
+              title: "Pipeline not yet run — use CLI to generate",
+              targetDuration: 60,
+              stylePreset: "whiteboard" as const,
+            },
+            scenes: [],
+          },
+          sceneAudio: undefined,
         }}
       />
 
-      {/* 1. Minimal Title Card */}
+      {/* Supporting Compositions */}
       <Composition
-        id="title-card"
+        id="TitleCard"
         component={TitleCard}
-        durationInFrames={DEFAULT_DURATION_IN_FRAMES}
         fps={DEFAULT_FPS}
         width={DEFAULT_WIDTH}
         height={DEFAULT_HEIGHT}
+        durationInFrames={150}
         schema={TitleCardSchema}
         defaultProps={{
-          titleText: "MOTION GRAPHICS ENGINE",
-          subtitleText: "Clean, Programmatic & Minimal",
-          titleColor: COLORS.text.primaryDark,
-          subtitleColor: COLORS.text.secondaryDark,
-          backgroundColor: COLORS.background.light,
+          titleText: "Transform Your Content into Cinematic Explainer Videos",
+          subtitleText:
+            "OmniCast converts articles, PDFs, and text into studio-quality video stories — narrated, asset-rich, and ready to publish.",
+          titleColor: "#111827",
+          subtitleColor: "#6b7280",
+          backgroundColor: "#ffffff",
         }}
       />
-
-      {/* 2. Responsive Lower Third */}
       <Composition
-        id="lower-third"
+        id="LowerThird"
         component={LowerThird}
-        durationInFrames={DEFAULT_DURATION_IN_FRAMES}
         fps={DEFAULT_FPS}
         width={DEFAULT_WIDTH}
         height={DEFAULT_HEIGHT}
+        durationInFrames={150}
         schema={LowerThirdSchema}
         defaultProps={{
-          primaryName: "Alex Mercer",
-          secondaryTitle: "Creative Director",
-          textColor: COLORS.text.primaryLight,
-          accentColor: COLORS.text.accentGreen,
-          panelColor: COLORS.background.dark,
+          primaryName: "Jorge Fernandez",
+          secondaryTitle: "Software Architect & Founder",
+          textColor: "#111827",
+          accentColor: "#6366f1",
+          panelColor: "#f8fafc",
         }}
       />
-
-      {/* 3. Kinetic Staggered Text */}
       <Composition
-        id="kinetic-text"
+        id="KineticText"
         component={KineticText}
-        durationInFrames={DEFAULT_DURATION_IN_FRAMES}
         fps={DEFAULT_FPS}
         width={DEFAULT_WIDTH}
         height={DEFAULT_HEIGHT}
+        durationInFrames={150}
         schema={KineticTextSchema}
         defaultProps={{
-          text: "CREATIVE PROGRAMMATIC VIDEO PRODUCTION ENGINE",
-          textColor: COLORS.text.primaryDark,
-          accentColor: COLORS.text.accentBlue,
-          backgroundColor: COLORS.background.light,
+          text: "The Future of Automated Video",
+          textColor: "#111827",
+          accentColor: "#6366f1",
+          backgroundColor: "#ffffff",
         }}
       />
-
-      {/* 4. Glass Transparent Overlay */}
       <Composition
-        id="transparent-overlay"
+        id="TransparentOverlay"
         component={TransparentOverlay}
-        durationInFrames={DEFAULT_DURATION_IN_FRAMES}
         fps={DEFAULT_FPS}
         width={DEFAULT_WIDTH}
         height={DEFAULT_HEIGHT}
+        durationInFrames={150}
         schema={TransparentOverlaySchema}
         defaultProps={{
-          badgeText: "Live Demo Render",
-          categoryText: "ProRes 4444",
-          badgeColor: "rgba(17, 24, 39, 0.8)",
-          textColor: "#F9FAFB",
-          borderColor: "#F59E0B",
+          badgeText: "Pro",
+          categoryText: "Video Pipeline",
+          badgeColor: "#6366f1",
+          textColor: "#111827",
+          borderColor: "#e5e7eb",
           playSoundEffect: false,
         }}
       />
-
-      {/* 5. Call to Action */}
       <Composition
-        id="call-to-action"
+        id="CallToAction"
         component={CallToAction}
-        durationInFrames={DEFAULT_DURATION_IN_FRAMES}
         fps={DEFAULT_FPS}
         width={DEFAULT_WIDTH}
         height={DEFAULT_HEIGHT}
+        durationInFrames={150}
         schema={CallToActionSchema}
         defaultProps={{
           buttonText: "Try Now",
