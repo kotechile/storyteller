@@ -34,11 +34,138 @@ export function buildStylePrompt(
   const components = parsePromptToComponents(prompt, stylePreset);
   if (infographicLabels && infographicLabels.length > 0) {
     components.infographicLabels = infographicLabels;
+    // Keep SCVD Data Points in sync with the display labels unless already explicit
+    if (!components.dataPoints || components.dataPoints.length === 0) {
+      components.dataPoints = infographicLabels;
+    }
   }
   if (referenceImage) {
     components.referenceImage = referenceImage;
   }
   return assembleNanoBananaPrompt(components, stylePreset);
+}
+
+/**
+ * Generates an image via kie.ai's nano-banana-pro task-based API.
+ * POST /api/v1/jobs/createTask → poll GET /api/v1/jobs/recordInfo?taskId=...
+ * (kie.ai has no OpenAI-compatible /images/generations endpoint for image models.)
+ */
+async function generateKieImage(
+  prompt: string,
+  apiKey: string,
+  modelName: string,
+  options: FluxGenerationOptions,
+  baseUrl?: string
+): Promise<{ imageUrl: string; provider: string } | null> {
+  const rawBase = (baseUrl || 'https://api.kie.ai').replace(/\/+$/, '').replace(/\/v1$/, '');
+  const createTaskUrl = `${rawBase}/api/v1/jobs/createTask`;
+  const recordInfoUrl = `${rawBase}/api/v1/jobs/recordInfo`;
+
+  // Map requested width to kie.ai resolution enum (1K / 2K / 4K)
+  const w = options.width || 1920;
+  const resolution = w >= 3840 ? '4K' : w >= 1920 ? '2K' : '1K';
+
+  // image_input: only hosted URLs (kie.ai rejects base64 data URLs)
+  const refImg =
+    options.referenceImage && options.referenceImage.startsWith('http')
+      ? [options.referenceImage]
+      : [];
+
+  const input = {
+    prompt,
+    image_input: refImg,
+    aspect_ratio: options.aspectRatio || '16:9',
+    resolution,
+    output_format: 'png',
+  };
+
+  // kie.ai tasks occasionally get stuck — retry once with a fresh task before giving up.
+  for (let round = 0; round < 2; round++) {
+    const imageUrl = await submitAndPollKieImage(createTaskUrl, recordInfoUrl, modelName, input, apiKey, round);
+    if (imageUrl) return { imageUrl, provider: 'kie' };
+  }
+  return null;
+}
+
+async function submitAndPollKieImage(
+  createTaskUrl: string,
+  recordInfoUrl: string,
+  modelName: string,
+  input: { prompt: string; image_input: string[]; aspect_ratio: string; resolution: string; output_format: string },
+  apiKey: string,
+  round: number
+): Promise<string | null> {
+  console.log(`[KieImage] Submitting nano-banana-pro task (model: ${modelName}, aspect: ${input.aspect_ratio}, res: ${input.resolution}, round ${round + 1}/2)...`);
+
+  const submitRes = await fetchWithRetry(
+    createTaskUrl,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: modelName, input }),
+      signal: AbortSignal.timeout(60000),
+    },
+    2,
+    1000
+  );
+
+  if (!submitRes.ok) {
+    const errBody = await submitRes.text().catch(() => '');
+    console.warn(`[KieImage] Submission failed (${submitRes.status}): ${errBody.substring(0, 300)}`);
+    return null;
+  }
+
+  let submitData: any;
+  try { submitData = await submitRes.json(); } catch {
+    console.warn('[KieImage] Failed to parse submission response');
+    return null;
+  }
+
+  if (submitData.code !== 200 || !submitData.data?.taskId) {
+    console.warn(`[KieImage] Unexpected submit response: ${JSON.stringify(submitData).substring(0, 300)}`);
+    return null;
+  }
+
+  const taskId = submitData.data.taskId;
+  console.log(`[KieImage] Task created: ${taskId}`);
+
+  // Poll for completion (up to ~10 min, 120 × 5s — nano-banana-pro 2K can be slow)
+  for (let attempt = 0; attempt < 120; attempt++) {
+    await new Promise((r) => setTimeout(r, 5000));
+    const pollRes = await fetch(`${recordInfoUrl}?taskId=${taskId}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!pollRes.ok) continue;
+    let pollData: any;
+    try { pollData = await pollRes.json(); } catch { continue; }
+    if (pollData.code !== 200) continue;
+
+    const state = (pollData.data?.state || '').toLowerCase();
+    if (state === 'success') {
+      const data = pollData.data || {};
+      let imageUrl = data.url || data.imageUrl || data.image_url || data.output?.imageUrl;
+      if (!imageUrl && data.resultJson) {
+        try {
+          const parsed = typeof data.resultJson === 'string' ? JSON.parse(data.resultJson) : data.resultJson;
+          imageUrl =
+            parsed?.resultUrls?.[0] || parsed?.imageUrls?.[0] || parsed?.images?.[0]?.url || parsed?.url;
+        } catch { /* ignore parse errors */ }
+      }
+      if (imageUrl) {
+        console.log(`[KieImage] Complete: ${imageUrl.substring(0, 80)}...`);
+        return imageUrl;
+      }
+      console.warn(`[KieImage] Task success but no image URL. Keys: ${Object.keys(data).join(', ')}`);
+      return null;
+    }
+    if (state === 'failed' || state === 'error') {
+      console.warn(`[KieImage] Task failed: ${JSON.stringify(pollData.data).substring(0, 300)}`);
+      return null;
+    }
+  }
+
+  console.warn(`[KieImage] Timed out polling task ${taskId} (round ${round + 1}/2)`);
+  return null;
 }
 
 /**
@@ -116,42 +243,15 @@ export async function generateFluxImage(
     }
   }
 
-  // 3. Kie.ai (Flux / Nano Banana / Imagen via Kie.ai API)
-  if ((provider.includes('kie') || provider.includes('flux') || provider.includes('banana')) && imageConfig.apiKey) {
-    try {
-      const baseUrl = imageConfig.baseUrl || 'https://api.kie.ai/v1';
-      const response = await fetchWithRetry(
-        `${baseUrl}/images/generations`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${imageConfig.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: imageConfig.modelName,
-            prompt: detailedPrompt,
-            aspect_ratio: options.aspectRatio || '16:9',
-          }),
-          signal: AbortSignal.timeout(60000),
-        },
-        2,
-        1000
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const imageUrl = data.data?.[0]?.url || data.image_url;
-        if (imageUrl) {
-          return {
-            imageUrl,
-            modelUsed: imageConfig.modelName,
-            provider: imageConfig.provider,
-          };
-        }
-      }
-    } catch (err) {
-      console.warn('[FluxImageGen] Kie.ai image gen failed:', err);
+  // 3. Kie.ai — nano-banana-pro task-based API (POST /api/v1/jobs/createTask → poll recordInfo)
+  if ((provider.includes('kie') || provider.includes('banana')) && imageConfig.apiKey) {
+    const kieResult = await generateKieImage(detailedPrompt, imageConfig.apiKey, imageConfig.modelName, options, imageConfig.baseUrl);
+    if (kieResult) {
+      return {
+        imageUrl: kieResult.imageUrl,
+        modelUsed: imageConfig.modelName,
+        provider: 'kie',
+      };
     }
   }
 
@@ -194,17 +294,11 @@ export async function generateFluxImage(
     }
   }
 
-  // 5. Fallback: Free Pollinations (always available, no API key needed)
-  const reqWidth = options.width || 1920;
-  const reqHeight = options.height || 1080;
-  const encodedPrompt = encodeURIComponent(detailedPrompt);
-  const generatedUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${reqWidth}&height=${reqHeight}&model=flux&nologo=true&seed=${Math.floor(Math.random() * 10000)}`;
-
-  return {
-    imageUrl: generatedUrl,
-    modelUsed: `pollinations_flux_${stylePreset}`,
-    provider: 'pollinations_ai',
-  };
+  // No fake fallback — surface the error instead of silently degrading to Pollinations.
+  throw new Error(
+    `[FluxImageGen] All image providers failed (model: "${imageConfig.modelName}", provider: "${imageConfig.provider}"). ` +
+    `No image was generated. Fix the provider config or retry.`
+  );
 }
 
 /**

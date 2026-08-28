@@ -35,6 +35,7 @@ function loadPipelineDefaults(): any {
         sceneAudio: data.sceneAudio || undefined,
         bgMusicUrl: data.bgMusicUrl || undefined,
         sfxCues: data.sfxCues || undefined,
+        audioBaseUrl: data.audioBaseUrl || undefined,
       };
     }
   } catch {}

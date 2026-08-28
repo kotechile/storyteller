@@ -11,9 +11,17 @@ export interface VoiceEntry {
 
 export const DEFAULT_VOICES: VoiceEntry[] = [
   {
+    id: 'thomas_louis',
+    voiceId: 'GBv7mTt0atIp3Br8iCJU',
+    name: 'Thomas Louis',
+    description: 'Authoritative, clear, and engaging male narration voice',
+    gender: 'male',
+    tags: ['Professional', 'Authoritative', 'Narration'],
+  },
+  {
     id: 'rachel',
     voiceId: '21m00Tcm4TlvDq8ikWAM',
-    name: 'Rachel (Default)',
+    name: 'Rachel',
     description: 'Calm, clear, and professional female voice',
     gender: 'female',
     audioUrl: 'https://cdn.elevenlabs.io/voices/21m00Tcm4TlvDq8ikWAM/preview.mp3',

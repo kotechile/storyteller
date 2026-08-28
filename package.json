@@ -12,6 +12,7 @@
     "@remotion/zod-types": "^4.0.484",
     "@supabase/supabase-js": "^2.108.2",
     "@types/pdf-parse": "^1.1.5",
+    "lucide-react": "^1.34.0",
     "pdf-parse": "^2.4.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",

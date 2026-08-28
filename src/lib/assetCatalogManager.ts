@@ -245,6 +245,20 @@ export async function resolveManifestImageAssets(
   let scene1ReferenceImage: string | undefined = undefined;
 
   for (const scene of updatedManifest.scenes) {
+    // text_to_video scenes get their visual from the video itself — no static image needed.
+    // (Generating one produces a small static infographic that leaks into the video layout.)
+    if ((scene as any).animationStrategy === 'text_to_video') {
+      console.log(`[AssetCatalogManager] Scene ${scene.sceneNumber}: skipping static image (text_to_video).`);
+      // Clear any prompt text the LLM left in sourceAssetId — it's not a URL and
+      // Remotion would otherwise try to load it as an image (EncodingError).
+      for (const el of (scene.layout?.elements || [])) {
+        if ((el as any).type === 'image' && (el as any).sourceAssetId && !(el as any).sourceAssetId.startsWith('http')) {
+          (el as any).sourceAssetId = '';
+        }
+      }
+      continue;
+    }
+
     const sceneImages = (scene.layout?.elements || []).filter((el: any) => el.type === 'image');
 
     for (const element of sceneImages) {
@@ -304,15 +318,16 @@ export async function resolveManifestImageAssets(
           imageUrl = resolved.imageUrl;
         }
 
-        element.sourceAssetId = imageUrl;
-
-        // Save Scene 1 output as the reference image signature for subsequent scenes
-        if ((scene.sceneNumber === 1 || !scene1ReferenceImage) && imageUrl) {
-          scene1ReferenceImage = imageUrl;
-          console.log(`[AssetCatalogManager] 📌 Locked Scene 1 reference image signature for character consistency.`);
+        if (imageUrl && (imageUrl.startsWith('http') || imageUrl.startsWith('data:'))) {
+          element.sourceAssetId = imageUrl;
+          if ((scene.sceneNumber === 1 || !scene1ReferenceImage)) {
+            scene1ReferenceImage = imageUrl;
+            console.log(`[AssetCatalogManager] 📌 Locked Scene 1 reference image signature for character consistency.`);
+          }
+          console.log(`[AssetCatalogManager] Resolved element '${element.id}' (${stylePreset}): ${imageUrl.substring(0, 60)}...`);
+        } else {
+          console.warn(`[AssetCatalogManager] Image resolution returned non-URL string for '${element.id}'`);
         }
-
-        console.log(`[AssetCatalogManager] Resolved element '${element.id}' (${stylePreset}): ${imageUrl.substring(0, 60)}...`);
       } catch (err) {
         console.warn(`[AssetCatalogManager] Error resolving image for element '${element.id}':`, err);
       }
@@ -380,7 +395,7 @@ export async function resolveManifestVideoAssets(
         const result = await animateImage({
           imageUrl,
           prompt,
-          duration: 5,
+          duration: Math.min(Math.round(scene.duration || 5), 15),
           motionStrength: 0.3,
         });
 
@@ -458,12 +473,22 @@ export async function resolveManifestTextToVideoAssets(
         duration: Math.min(Math.round(scene.duration || 10), 15), // Match voiceover, max 15s (kie.ai limit)
       });
 
-      // Store video URL on the primary image element
+      // Store video URL on the primary image element, and expand it to full-screen.
+      // (text_to_video scenes must render the video edge-to-edge; the LLM layout may have
+      //  left a small hub image at 40%x28% which shrinks the video into a thumbnail.)
       imageElements[0].videoUrl = result.videoUrl;
+      imageElements[0].sourceAssetId = '';
+      imageElements[0].x = 0;
+      imageElements[0].y = 0;
+      imageElements[0].width = 100;
+      imageElements[0].height = 100;
+      imageElements[0].zIndex = 1;
       console.log(`[AssetCatalogManager] Text-to-video complete for scene ${scene.sceneNumber}: ${result.videoUrl.substring(0, 60)}...`);
     } catch (err) {
-      console.warn(`[AssetCatalogManager] Text-to-video failed for scene ${scene.sceneNumber}:`, err);
-      // Fall back to static image
+      // No fake fallback — surface the error and leave the scene empty.
+      console.error(`[AssetCatalogManager] Text-to-video FAILED for scene ${scene.sceneNumber}:`, err);
+      imageElements[0].sourceAssetId = '';
+      imageElements[0].videoUrl = undefined;
     }
 
     // Longer delay for text-to-video (more expensive)

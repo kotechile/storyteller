@@ -2,12 +2,128 @@ import { defineConfig, loadEnv, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { createClient } from '@supabase/supabase-js';
-import { buildStylePrompt } from './src/lib/fluxImageGen';
+
+import fs from 'node:fs';
+import path from 'node:path';
+
+/** Saves a generated image (base64 data URL) to public/generated_assets/ and returns a hosted relative path.
+ *  kie.ai image-to-video rejects `data:image/...;base64` as first_frame_url (500 error) — it needs a hosted URL. */
+function saveGeneratedImage(imageUrl: string): string {
+  try {
+    if (!imageUrl.startsWith('data:image')) return imageUrl; // already hosted
+    const assetsDir = path.join(process.cwd(), 'public', 'generated_assets');
+    if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
+    const filename = `scene_${Date.now()}_${Math.floor(Math.random() * 10000)}.png`;
+    const absPath = path.join(assetsDir, filename);
+    const base64Data = imageUrl.replace(/^data:image\/\w+;base64,/, '');
+    fs.writeFileSync(absPath, Buffer.from(base64Data, 'base64'));
+    return `/generated_assets/${filename}`;
+  } catch (err) {
+    console.warn('[ViteServerProxy] Failed to save generated image to disk:', err);
+    return imageUrl;
+  }
+}
+
+/** Downloads remote image URLs in a manifest (kie.ai tempfile URLs expire after a TTL) into
+ *  public/generated_assets/ so the Remotion render doesn't hit expired URLs mid-render.
+ *  Returns a deep copy with `sourceAssetId` rewritten to local paths. */
+async function localizeManifestImages(manifest: any): Promise<any> {
+  const copy = JSON.parse(JSON.stringify(manifest));
+  const assetsDir = path.join(process.cwd(), 'public', 'generated_assets');
+  if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
+
+  for (const scene of copy.scenes || []) {
+    for (const el of scene.layout?.elements || []) {
+      if (el.type !== 'image') continue;
+      const src = el.sourceAssetId;
+      if (!src || !(src.startsWith('http://') || src.startsWith('https://'))) continue;
+      try {
+        const resp = await fetch(src);
+        if (!resp.ok) {
+          console.warn(`[Render] Image ${src.substring(0, 70)}… returned ${resp.status} (expired?) — leaving as-is.`);
+          continue;
+        }
+        const buf = Buffer.from(await resp.arrayBuffer());
+        const filename = `scene_${Date.now()}_${Math.floor(Math.random() * 10000)}.png`;
+        fs.writeFileSync(path.join(assetsDir, filename), buf);
+        el.sourceAssetId = `/generated_assets/${filename}`;
+        console.log(`[Render] Localized image → /generated_assets/${filename}`);
+      } catch (err) {
+        console.warn(`[Render] Failed to localize image ${src.substring(0, 70)}…:`, err);
+      }
+    }
+  }
+  return copy;
+}
 
 function supabaseApiProxyPlugin(env: Record<string, string>): Plugin {
   return {
     name: 'supabase-api-proxy',
     configureServer(server) {
+      // Serve dynamically-generated public files fresh from disk.
+      // Vite's built-in static middleware caches the public/ dir listing at startup,
+      // so files written AFTER server start (TTS audio, generated assets, manifests)
+      // return 404 until a restart. This middleware reads them on every request.
+      server.middlewares.use((req, res, next) => {
+        const urlPath = decodeURIComponent((req.url || '').split('?')[0]);
+        if (urlPath.startsWith('/api/')) return next();
+        const filePath = path.join(process.cwd(), 'public', urlPath.replace(/^\//, ''));
+        try {
+          const stat = fs.statSync(filePath);
+          if (!stat.isFile()) return next();
+          const ext = path.extname(filePath).toLowerCase();
+          const mime: Record<string, string> = {
+            '.mp3': 'audio/mpeg',
+            '.wav': 'audio/wav',
+            '.json': 'application/json',
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.webp': 'image/webp',
+            '.svg': 'image/svg+xml',
+            '.mp4': 'video/mp4',
+            '.html': 'text/html',
+          };
+          const total = stat.size;
+          const range = req.headers.range;
+
+          res.setHeader('Accept-Ranges', 'bytes');
+          res.setHeader('Content-Type', mime[ext] || 'application/octet-stream');
+          // no-cache (revalidate) — allows browser caching but never serves stale content.
+          res.setHeader('Cache-Control', 'no-cache');
+
+          // Support HTTP Range requests (required for <Audio>/<video> seeking)
+          if (range) {
+            const m = /bytes=(\d*)-(\d*)/.exec(range);
+            if (m) {
+              let start = m[1] ? parseInt(m[1], 10) : 0;
+              let end = m[2] ? parseInt(m[2], 10) : total - 1;
+              if (isNaN(start) || start < 0) start = 0;
+              if (isNaN(end) || end >= total) end = total - 1;
+              if (start > end || start >= total) {
+                res.statusCode = 416;
+                res.setHeader('Content-Range', `bytes */${total}`);
+                res.end();
+                return;
+              }
+              res.statusCode = 206;
+              res.setHeader('Content-Range', `bytes ${start}-${end}/${total}`);
+              res.setHeader('Content-Length', end - start + 1);
+              fs.createReadStream(filePath, { start, end }).pipe(res);
+              return;
+            }
+          }
+
+          res.statusCode = 200;
+          res.setHeader('Content-Length', total);
+          fs.createReadStream(filePath).pipe(res);
+          return;
+        } catch {
+          /* fall through to next middleware */
+        }
+        next();
+      });
+
       server.middlewares.use(async (req, res, next) => {
         // 1. Endpoint: /api/llm-config
         if (req.url?.startsWith('/api/llm-config')) {
@@ -164,8 +280,6 @@ function supabaseApiProxyPlugin(env: Record<string, string>): Plugin {
           req.on('end', async () => {
             try {
               const { prompt, stylePreset, infographicLabels, referenceImage } = JSON.parse(bodyStr);
-              const { buildStylePrompt } = await import('./src/lib/fluxImageGen');
-              const wrappedPrompt = buildStylePrompt(prompt, stylePreset || 'illustration', infographicLabels, referenceImage);
               console.log(`[ViteServerProxy] Generating ${stylePreset || 'illustration'} image with Nano Banana Pro prompt assembly...`);
 
               // 1. Try the configured image model (Gemini, Flux, Kie.ai, etc.)
@@ -181,47 +295,17 @@ function supabaseApiProxyPlugin(env: Record<string, string>): Plugin {
                   referenceImage,
                 });
                 console.log(`[ViteServerProxy] Image result: provider=${result.provider}, model=${result.modelUsed}, url=${result.imageUrl.substring(0, 60)}...`);
-                // Only use if it's NOT Pollinations fallback
-                if (result.provider !== 'pollinations' && result.provider !== 'pollinations_ai') {
-                  console.log(`[ViteServerProxy] Generated with ${result.provider} (${result.modelUsed})`);
-                  res.statusCode = 200;
-                  res.setHeader('Content-Type', 'application/json');
-                  res.end(JSON.stringify({ imageUrl: result.imageUrl, provider: result.provider }));
-                  return;
-                }
-                console.log(`[ViteServerProxy] Got Pollinations fallback (${result.provider}), trying direct Pollinations URL...`);
+                console.log(`[ViteServerProxy] Generated with ${result.provider} (${result.modelUsed})`);
+                // Save base64 (Gemini) to disk → hosted URL enables image_to_video (kie.ai rejects data: URLs)
+                const hostedUrl = saveGeneratedImage(result.imageUrl);
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ imageUrl: hostedUrl, provider: result.provider }));
+                return;
               } catch (err: any) {
-                console.warn('[ViteServerProxy] Image model failed, falling back to Pollinations:', err.message);
+                // No fake fallback — surface the error to the caller (returns 500 below).
+                throw err;
               }
-
-              // 2. Fallback: Pollinations free API with retry
-              let lastError: Error | null = null;
-              for (let attempt = 0; attempt < 4; attempt++) {
-                try {
-                  const encoded = encodeURIComponent(wrappedPrompt);
-                  const pollinationsUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1920&height=1080&model=flux&nologo=true&seed=${Math.floor(Math.random() * 10000)}`;
-                  const imageRes = await fetch(pollinationsUrl);
-                  if (imageRes.status === 429) {
-                    const delay = Math.pow(2, attempt) * 1500 + Math.random() * 1000;
-                    console.log(`[ViteServerProxy] Rate limited (429), retrying in ${(delay/1000).toFixed(1)}s (attempt ${attempt + 1}/4)...`);
-                    await new Promise(r => setTimeout(r, delay));
-                    continue;
-                  }
-                  if (!imageRes.ok) throw new Error(`Pollinations returned ${imageRes.status}`);
-                  const imageBuffer = await imageRes.arrayBuffer();
-                  const base64 = Buffer.from(imageBuffer).toString('base64');
-                  const dataUrl = `data:image/png;base64,${base64}`;
-                  res.statusCode = 200;
-                  res.setHeader('Content-Type', 'application/json');
-                  res.end(JSON.stringify({ imageUrl: dataUrl, provider: 'pollinations' }));
-                  return;
-                } catch (err: any) {
-                  lastError = err;
-                  if (err.message?.includes('429')) continue;
-                  break; // non-rate-limit error — don't retry
-                }
-              }
-              throw lastError || new Error('Pollinations failed after retries');
             } catch (err: any) {
               console.error('[ViteServerProxy] Image generation failed:', err.message);
               res.statusCode = 500;
@@ -298,14 +382,18 @@ function supabaseApiProxyPlugin(env: Record<string, string>): Plugin {
             try {
               const fs = await import('fs');
               const path = await import('path');
-              const { manifest, sceneAudio, bgMusicUrl, camera, lighting, annotationConfig, logoUrl } = JSON.parse(bodyStr);
+              const { manifest, sceneAudio, bgMusicUrl, camera, lighting, annotationConfig, logoUrl, outputFilename, outputDir } = JSON.parse(bodyStr);
 
               const outDir = path.join(process.cwd(), 'out');
               fs.mkdirSync(outDir, { recursive: true });
 
+              // Download remote (kie.ai tempfile) images to local storage so they don't
+              // expire mid-render (tempfile URLs have a TTL and 404 after a while).
+              const localizedManifest = await localizeManifestImages(manifest);
+
               // Compute scene boundaries
               let cumulative = 0;
-              const sceneBoundaries = manifest.scenes.map((s: any) => {
+              const sceneBoundaries = localizedManifest.scenes.map((s: any) => {
                 const sa = (sceneAudio || []).find((a: any) => a.sceneNumber === s.sceneNumber);
                 const dur = s.duration || sa?.durationSeconds || 10;
                 const b = { sceneNumber: s.sceneNumber, startSeconds: cumulative, durationSeconds: dur };
@@ -313,8 +401,12 @@ function supabaseApiProxyPlugin(env: Record<string, string>): Plugin {
                 return b;
               });
 
+              // Audio base URL must point at THIS Vite server (serving public/*.mp3), not
+              // Remotion's headless bundle server (port 3000) that the renderer runs in.
+              const audioBaseUrl = `http://${req.headers.host || 'localhost:3001'}`;
+
               const payload = {
-                manifest,
+                manifest: localizedManifest,
                 sceneAudio: sceneAudio || [],
                 sceneBoundaries,
                 sfxCues: [],
@@ -324,6 +416,7 @@ function supabaseApiProxyPlugin(env: Record<string, string>): Plugin {
                 lighting: lighting || undefined,
                 annotationConfig: annotationConfig || undefined,
                 logoUrl: logoUrl || undefined,
+                audioBaseUrl,
               };
 
               const payloadPath = path.join(outDir, 'generated_storyboard.json');
@@ -340,7 +433,30 @@ function supabaseApiProxyPlugin(env: Record<string, string>): Plugin {
               fs.mkdirSync(srcLibDir, { recursive: true });
               fs.writeFileSync(path.join(srcLibDir, 'latestStory.json'), JSON.stringify(payload, null, 2));
 
-              const videoPath = path.join(outDir, 'generated_video.mp4');
+              // Sanitize the user-supplied filename: keep only safe characters, force .mp4.
+              let safeName = String(outputFilename || 'generated_video').trim();
+              safeName = safeName.replace(/[^a-zA-Z0-9_\- ]/g, '').replace(/\s+/g, '_');
+              if (!safeName) safeName = 'generated_video';
+              if (!safeName.toLowerCase().endsWith('.mp4')) safeName += '.mp4';
+
+              // Resolve destination directory: ~/ expansion, absolute path, or relative to project.
+              const os = await import('os');
+              let destDir = outDir;
+              if (outputDir && String(outputDir).trim()) {
+                let d = String(outputDir).trim();
+                if (d === '~') d = os.homedir();
+                else if (d.startsWith('~/')) d = path.join(os.homedir(), d.slice(2));
+                destDir = path.isAbsolute(d) ? d : path.join(process.cwd(), d);
+              }
+              fs.mkdirSync(destDir, { recursive: true });
+
+              const videoPath = path.join(destDir, safeName);
+              // Preview URL only works for files under the project's out/ dir.
+              const projectOutDir = path.join(process.cwd(), 'out');
+              const relToOut = path.relative(projectOutDir, videoPath);
+              const videoUrlPath = (!relToOut.startsWith('..') && !path.isAbsolute(relToOut))
+                ? `/out/${relToOut.split(path.sep).map((s: string) => encodeURIComponent(s)).join('/')}`
+                : null;
               // Remove old render if exists so status endpoint can detect fresh output
               try { fs.unlinkSync(videoPath); } catch {}
 
@@ -362,6 +478,8 @@ function supabaseApiProxyPlugin(env: Record<string, string>): Plugin {
                 totalFrames: 0,
                 percent: 0,
                 error: '',
+                outputPath: videoPath,
+                outputUrl: videoUrlPath,
               };
 
               // Spawn render in background
@@ -430,10 +548,12 @@ function supabaseApiProxyPlugin(env: Record<string, string>): Plugin {
           try {
             const fs = await import('fs');
             const path = await import('path');
-            const videoPath = path.join(process.cwd(), 'out', 'generated_video.mp4');
+            const job = (globalThis as any).__currentRenderJob;
+            const videoPath = job?.outputPath
+              ? job.outputPath
+              : path.join(process.cwd(), 'out', 'generated_video.mp4');
             const exists = fs.existsSync(videoPath);
             const size = exists ? fs.statSync(videoPath).size : 0;
-            const job = (globalThis as any).__currentRenderJob;
 
             const isDone = job ? job.done : (exists && size > 100000);
             const isSuccess = job ? job.success : true;
@@ -450,6 +570,7 @@ function supabaseApiProxyPlugin(env: Record<string, string>): Plugin {
               error: job?.error || '',
               size,
               path: videoPath,
+              outputUrl: job?.outputUrl ?? null,
             }));
           } catch (err: any) {
             res.statusCode = 200;
@@ -478,6 +599,30 @@ function supabaseApiProxyPlugin(env: Record<string, string>): Plugin {
               return;
             }
           } catch (err) {}
+        }
+
+        // 8.5. Endpoint: /api/pick-folder — native macOS folder chooser (returns POSIX path)
+        if (req.url?.startsWith('/api/pick-folder')) {
+          try {
+            const { execFile } = await import('child_process');
+            execFile('osascript', ['-e', 'POSIX path of (choose folder with prompt "Choose output folder")'], (err, stdout) => {
+              if (err) {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ folder: null, cancelled: true }));
+                return;
+              }
+              const folder = String(stdout).trim();
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ folder, cancelled: false }));
+            });
+          } catch (err: any) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: String(err.message || err) }));
+          }
+          return;
         }
 
         // 9. Endpoint: /api/dino — proxy to Grounding DINO Python backend

@@ -35,6 +35,21 @@ function findWordTimestamps(
     word: cleanText(t.word),
   })).filter(t => t.word.length > 0);
 
+  // Single word: return its FIRST occurrence (most natural highlight start).
+  if (targetWords.length === 1) {
+    const tw = targetWords[0];
+    for (let i = 0; i < cleanTS.length; i++) {
+      const w = cleanTS[i].word;
+      const exact = w === tw;
+      const fuzzy = tw.length > 2 && (w.includes(tw) || tw.includes(w));
+      if (exact || fuzzy) {
+        const start = cleanTS[i].start;
+        return [start, Math.min(start + 2.5, sceneDuration)];
+      }
+    }
+    return [-1, -1];
+  }
+
   let bestStart = -1, bestLen = 0;
 
   for (let i = cleanTS.length - 1; i >= 0; i--) {
@@ -131,66 +146,58 @@ export async function generateRegionFocusEvents(
     // Allow single-character labels (e.g., numbers like "44")
     if (labelClean.length < 1) continue;
 
-    // Check if label words appear in narration
     const words = labelClean.split(/\s+/).filter(w => w.length >= 1);
     if (words.length === 0) continue;
 
-    if (words.length === 1) {
-      // Single word: must appear in narration
-      if (!narrationLower.includes(words[0])) {
-        console.log(`[RegionSync]   SKIP "${dr.label}" — not in narration`);
-        continue;
-      }
-    } else {
-      // Multi-word: the full cleaned phrase must appear as contiguous substring
-      if (!narrationLower.includes(labelClean)) {
-        // For 3+ word labels: allow if >= 80% of content words appear
-        if (words.length >= 3) {
-          const contentWords = words.filter(w => w.length > 2);
-          if (contentWords.length === 0) {
-            console.log(`[RegionSync]   SKIP "${dr.label}" — no content words`);
-            continue;
-          }
-          const matched = contentWords.filter(w => narrationLower.includes(w));
-          if (matched.length < Math.ceil(contentWords.length * 0.8)) {
-            console.log(`[RegionSync]   SKIP "${dr.label}" — phrase not in narration (${matched.length}/${contentWords.length} words match)`);
-            continue;
-          }
-        } else {
-          // 2-word: must appear exactly as a phrase
-          console.log(`[RegionSync]   SKIP "${dr.label}" — phrase not in narration`);
-          continue;
-        }
-      }
+    // Content words = words with meaningful length (>= 3 chars) to avoid matching
+    // noise like "a", "of", "to". If none (e.g. a 2-letter acronym label), keep all.
+    const contentWords = words.filter(w => w.length >= 3);
+    const effectiveWords = contentWords.length > 0 ? contentWords : words;
+
+    // Word-level matching: count how many content words appear ANYWHERE in the
+    // narration (not necessarily contiguous). This is far more forgiving than the
+    // old exact-phrase match and catches "EMERGENCY BUFFER" → "emergency ... fund".
+    const matchedWords = effectiveWords.filter(w => narrationLower.includes(w));
+    const minRequired = effectiveWords.length >= 3
+      ? Math.ceil(effectiveWords.length * 0.5)   // 3+ words: at least half
+      : 1;                                        // 1-2 words: at least one
+
+    if (matchedWords.length < minRequired) {
+      console.log(`[RegionSync]   SKIP "${dr.label}" — only ${matchedWords.length}/${effectiveWords.length} words in narration`);
+      continue;
     }
 
-    // Find timestamps — try full label first, requiring exact or high-quality match
-    let [startSec, endSec] = findWordTimestamps(dr.label, wordTimestamps, sceneDuration);
+    // Find timestamps — try full label first, then sub-phrases, then individual words.
+    let startSec = -1, endSec = -1;
 
-    if (startSec < 0 && words.length >= 2) {
-      // Try multi-word sub-phrases (e.g. "vulnerability score" from "VULNERABILITY SCORE (Real-time risk adjustments)")
-      const multiWordPhrases = [
-        words.slice(0, 2).join(" "),
-        words.filter(w => w.length > 3).join(" "),
-      ].filter(p => p.trim().length > 3);
+    // 1) Full contiguous phrase
+    [startSec, endSec] = findWordTimestamps(dr.label, wordTimestamps, sceneDuration);
 
-      for (const phrase of multiWordPhrases) {
+    // 2) Longest content-word sub-phrases
+    if (startSec < 0 && effectiveWords.length >= 2) {
+      const subPhrases = [
+        effectiveWords.join(" "),
+        effectiveWords.slice(0, Math.max(2, effectiveWords.length - 1)).join(" "),
+      ].filter(p => p.trim().length > 2);
+
+      for (const phrase of subPhrases) {
         const [ps, pe] = findWordTimestamps(phrase, wordTimestamps, sceneDuration);
         if (ps >= 0) { startSec = ps; endSec = pe; break; }
       }
     }
 
+    // 3) Individual content words — pick the earliest spoken one
     if (startSec < 0) {
-      // Fall back to key individual words (only words > 3 chars to avoid matching common short words)
-      const keyWords = words.filter(w => w.length > 3);
-      for (const w of keyWords) {
+      let bestStart = Infinity, bestEnd = -1;
+      for (const w of effectiveWords) {
         const [ws, we] = findWordTimestamps(w, wordTimestamps, sceneDuration);
-        if (ws >= 0 && (startSec < 0 || ws < startSec)) { startSec = ws; endSec = we; }
+        if (ws >= 0 && ws < bestStart) { bestStart = ws; bestEnd = we; }
       }
+      if (bestStart !== Infinity) { startSec = bestStart; endSec = bestEnd; }
     }
 
     if (startSec < 0) {
-      console.log(`[RegionSync]   NO TIMESTAMPS for "${dr.label}" — regenerate voice first`);
+      console.log(`[RegionSync]   NO TIMESTAMPS for "${dr.label}" — words not found in voice timestamps`);
       continue;
     }
 

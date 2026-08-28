@@ -604,7 +604,8 @@ async function pollKieTask(
   console.log(`[kie.ai] Polling task ${taskId} every 10s...`);
   const statusEndpoint = `${baseUrl}/api/v1/jobs/recordInfo?taskId=${taskId}`;
   const resultEndpoint = `${baseUrl}/api/v1/jobs/result?taskId=${taskId}`;
-  const maxAttempts = 60; // 10 min
+  const maxAttempts = 120; // 20 min — kie.ai seedance tasks can sit in "waiting" queue for a long time
+  let lastState = 'unknown';
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     await new Promise(r => setTimeout(r, 10000));
@@ -627,6 +628,7 @@ async function pollKieTask(
     }
 
     const state = (pollData.data?.state || '').toLowerCase();
+    lastState = state || 'unknown';
 
     if (state === 'success') {
       // Try multiple known paths for the video URL, including resultJson
@@ -700,7 +702,7 @@ async function pollKieTask(
     }
   }
 
-  throw new Error(`[kie.ai] Timed out after ${maxAttempts * 10}s`);
+  throw new Error(`[kie.ai] Timed out after ${maxAttempts * 10}s (taskId: ${taskId}, last state: "${lastState}")`);
 }
 
 // ── Text-to-Video ──
@@ -716,15 +718,27 @@ async function generateWithKieText(
   const baseUrl = config.baseUrl || 'https://api.kie.ai';
   const model = config.modelName || 'bytedance/seedance-2';
 
-  const taskId = await submitKieTask(model, {
-    prompt,
-    duration,
-    aspect_ratio: '16:9',
-    resolution: '720p',
-    generate_audio: false,
-  }, apiKey, baseUrl);
-
-  return pollKieTask(taskId, apiKey, baseUrl, model);
+  // Retry once on timeout — kie.ai tasks can sit in "waiting" queue past the poll window.
+  for (let round = 0; round < 2; round++) {
+    const taskId = await submitKieTask(model, {
+      prompt,
+      duration,
+      aspect_ratio: '16:9',
+      resolution: '720p',
+      generate_audio: false,
+    }, apiKey, baseUrl);
+    try {
+      return await pollKieTask(taskId, apiKey, baseUrl, model);
+    } catch (err: any) {
+      console.error(`[kie.ai] Text-to-video attempt ${round + 1}/2 failed:`, err.message || err);
+      if (round === 0 && (err.message || '').includes('Timed out')) {
+        console.warn('[kie.ai] Text-to-video timed out, retrying with a fresh task (round 2/2)...');
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('[kie.ai] Text-to-video failed after 2 attempts');
 }
 
 // ── Image-to-Video ──
@@ -741,16 +755,28 @@ async function animateWithKie(
   const baseUrl = config.baseUrl || 'https://api.kie.ai';
   const model = config.modelName || 'bytedance/seedance-2';
 
-  const taskId = await submitKieTask(model, {
-    prompt,
-    first_frame_url: imageUrl,
-    duration,
-    aspect_ratio: '16:9',
-    resolution: '720p',
-    generate_audio: false,
-  }, apiKey, baseUrl);
-
-  return pollKieTask(taskId, apiKey, baseUrl, model);
+  // Retry once on timeout — kie.ai tasks can sit in "waiting" queue past the poll window.
+  for (let round = 0; round < 2; round++) {
+    const taskId = await submitKieTask(model, {
+      prompt,
+      first_frame_url: imageUrl,
+      duration,
+      aspect_ratio: '16:9',
+      resolution: '720p',
+      generate_audio: false,
+    }, apiKey, baseUrl);
+    try {
+      return await pollKieTask(taskId, apiKey, baseUrl, model);
+    } catch (err: any) {
+      console.error(`[kie.ai] Image-to-video attempt ${round + 1}/2 failed:`, err.message || err);
+      if (round === 0 && (err.message || '').includes('Timed out')) {
+        console.warn('[kie.ai] Image-to-video timed out, retrying with a fresh task (round 2/2)...');
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('[kie.ai] Image-to-video failed after 2 attempts');
 }
 
 // ── Main Text-to-Video Entry Point ──

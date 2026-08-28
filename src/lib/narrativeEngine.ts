@@ -262,7 +262,7 @@ PHOTOGRAPHY MODE & CHARACTER CONSISTENCY RULES
 When generating photo-realistic cinematic sequences, enforce these prompt engineering constraints:
 1. THE ANCHOR SUBJECT VARIABLE: Generate ONE highly specific, distinct character description (e.g. "35-year-old woman with short curly brown hair wearing a navy blue turtleneck") and prepend this exact string to every character-focused imageDescription in the sequence to ensure consistency.
 2. PERSPECTIVE SHIFTS: Vary the camera angle rather than the subject to create visual interest. Specify "over-the-shoulder shot", "close-up of hands typing", "wide shot from behind", or "side profile in medium shot" to avoid rendering the face repeatedly in every scene, masking facial inconsistencies.
-3. THE B-ROLL RULE: After establishing the subject in Scene 1, subsequent scenes should focus on the objects of their work (e.g., a glowing server rack, a close-up of a contract, a spilled coffee mug on a desk) rather than the person, simulating standard documentary B-roll.
+3. THE B-ROLL RULE: After establishing the subject in Scene 1, subsequent scenes should focus on the objects of their work (e.g., a glowing server rack, a close-up of a signed contract, a ticking clock face with its hands blurred in motion) rather than the person, simulating standard documentary B-roll.
 4. ENVIRONMENT & SCENE DIVERSITY (ANTI-MONOTONY RULE): Prevent keeping the character sat in an office for all scenes. Extract abstract, emotional, or thematic metaphors from the article and map them to diverse physical settings and visual scenes (e.g., a serene river landscape at sunrise to represent peace of mind or financial freedom, an airplane wing above clouds to represent travel or scaling up, a mountain summit for milestone achievement, a bustling open-air market for commerce). Every scene must explore a distinct visual setting or metaphor.
 
 ═══════════════════════════════════════
@@ -336,20 +336,19 @@ POSITION: The interlude should be the scene right after the problem is establish
 
 VOICEOVER: Shift the tone — warm, empathetic, reflective. Use phrases like "Beyond the numbers...", "Here's the thing most calculators miss...", "The quiet truth is...". Speak directly to the viewer's emotions: the uncertainty of leaving comfort zones, the excitement of new beginnings, the human cost of indecision.
 
-IMAGEDESCRIPTION (CRITICAL — write a cinematic video prompt, NOT a diagram): The imageDescription for this scene IS the text-to-video prompt. Write it as a cinematic shot description with:
-- Specific subject: "a professional sitting on a quiet morning commuter train", "a person standing at the entrance of a modern office high-rise"
+IMAGEDESCRIPTION (CRITICAL — write a cinematic video prompt, NOT a diagram): The imageDescription for this scene IS the text-to-video prompt. Extract a SPECIFIC visual metaphor from THIS article's core subject matter — do NOT fall back to generic corporate stock imagery. FORBIDDEN clichés: a person on a commuter train, a person at a desk, a generic boardroom, a handshake, a generic city skyline. Instead, translate the article's central emotional tension into a CONCRETE, evocative scene that only makes sense for THIS topic. Strong topic-specific metaphors (use these as a pattern, adapt to THIS article): a cracked porcelain piggy bank being repaired as warm golden light seeps through the seams (financial fragility → recovery); a pair of hands pulling a lever that re-routes a runaway railcar off a cliff edge (regaining control); a single protected sapling thriving inside a glass dome while weeds wilt outside (wealth protection); a fog bank lifting off a calm lake to reveal a clear path to the far shore (clarity after uncertainty). Then write the metaphor as a cinematic shot with:
+- Specific subject: name the exact person/object embodying the metaphor (never the vague "a professional" or "a person")
 - Camera motion: "slow tracking shot", "cinematic dolly forward", "gentle camera drift"
 - Lighting: "warm golden hour", "soft morning sunlight through glass"
 - Emotion: "thoughtful", "quiet confidence", "contemplative"
-- Environment: "city skyline background", "modern glass building facade", "sunlit conference room"
+- Environment: a distinctive setting that reinforces the metaphor (not a generic office or train)
 - Quality suffix: "photorealistic, 4k, cinematic shallow depth of field, subtle motion"
+
+VARIETY RULE: This interlude's imagery MUST be visually distinct from every other scene and MUST NOT repeat the same subject or cliché used anywhere else in the video.
 
 NO DIAGRAM ELEMENTS. No text labels, arrows, boxes, or structured content. This scene is pure atmosphere and human emotion.
 
 IMPORTANT: This scene MUST still include one image element in its layout. The image element's "imageDescription" field IS the text-to-video prompt. Its "content" should be a short label like "Cinematic Interlude". Set "sourceAssetId" to empty string to skip static image generation — the video will be attached later.
-
-EXAMPLE IMAGEDESCRIPTION:
-"Cinematic medium shot of a professional sitting on a quiet morning commuter train looking thoughtfully out the window, soft morning sunlight streaming through glass creating gentle lens flare, bokeh background of passing city scenery, subtle natural movement, warm contemplative mood, photorealistic 4k resolution, cinematic shallow depth of field."
 
 CLASSIFICATION RULES:
 1. Scene 0 (title card) MUST be "static".
@@ -874,17 +873,34 @@ Visual style: ${styleGuide}
 }
 
 imagePrompt rules: cinematic 35mm photography style, describe a REAL SCENE with context (not an isolated object on white), include human element when possible, use spatial and atmospheric words, describe lighting conditions and mood.
+
+VISUAL METAPHOR (MANDATORY): Lead the imagePrompt with the structural metaphor that fits this scene:
+- "a split-screen photographic diptych" (two contrasting real-world scenes side by side, divided by a clean vertical seam) when the narration compares or contrasts
+- "a sequential photographic sequence" (a series of real-world scenes arranged left-to-right) when the narration describes a process or progression
+- "a photographic branching sequence" (distinct visual paths leading to different outcomes) when the narration describes a decision or fork
+- "a cinematic environmental portrait" (a wide establishing shot with a clear focal subject and supporting context) otherwise
 layout: title as "Main Topic: One-line descriptive subtitle".
 
 Article: "${articleTitle}"  |  Narration: "${scene.narration}"
 Output ONLY valid JSON:`
-      : `You are an expert visual art director. Output valid JSON describing a labeled explanatory diagram in ${stylePreset} style.
+      : `You are an expert visual art director. Output valid JSON describing a labeled explanatory infographic in ${stylePreset} style.
 
 Visual style: ${styleGuide}
 
 {
   "imagePrompt": "one descriptive paragraph (80-150 words) describing what the VIEWER SEES",
   "layout": { "title": "Main Title: Descriptive subtitle explaining what the scene shows", "labels": ["key term 1", "key term 2"], "connectors": [{"from":"hub","to":"label 1"}] }
+
+VISUAL METAPHOR SELECTION (MANDATORY): Choose the single structural metaphor that best fits this scene and lead the imagePrompt with it explicitly:
+- "an isometric workflow pipeline diagram" (for processes, steps, stages, flows)
+- "a clean flat-design architecture map" (for systems, stacks, components, infrastructure)
+- "a split-screen comparative matrix" (for comparisons, trade-offs, contrasts)
+- "a minimalist decision tree flowchart" (for decisions, criteria, branches, thresholds)
+Then describe the layout direction (left-to-right flow, central hub branching outward, side-by-side columns, or top-down branching).
+
+DATA HIERARCHY (MANDATORY): State the primary focal point, the secondary supporting details, and the tertiary concise labels.
+
+TEXT DENSITY (MANDATORY): Describe the diagram as using concise labels (maximum 3 words each), key data points, and universally recognized icons — NEVER paragraphs of prose, and no scrambled or illegible text.
 
 imagePrompt rules: ${stylePreset} style, flowing paragraph, embed labels naturally as "titled 'X'", "labeled 'Y'", use spatial words, describe connectors and layout within the image itself.
 layout: title as "Main Topic: One-line descriptive subtitle", labels 2-4 short terms, connectors simple hub-to-label.

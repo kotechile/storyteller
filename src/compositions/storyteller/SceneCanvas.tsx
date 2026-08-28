@@ -88,7 +88,15 @@ export const SceneCanvas: React.FC<SceneCanvasProps> = ({
   const isImageToVideo = strategy === 'image_to_video';
   const rawElements = scene.layout?.elements || [];
   const optimizedElements = (isTextToVideo || isImageToVideo)
-    ? rawElements.filter((el: any) => el.type === 'image') // Only keep images for video scenes
+    ? rawElements
+        .filter((el: any) => el.type === 'image') // Only keep images for video scenes
+        .map((el: any) =>
+          // text_to_video renders edge-to-edge: force full-screen regardless of the LLM layout
+          // (otherwise a 40%x28% hub box crops the 16:9 video via objectFit:'cover').
+          isTextToVideo
+            ? { ...el, x: 0, y: 0, width: 100, height: 100, zIndex: 1 }
+            : el
+        )
     : autoOptimizeSceneLayout(rawElements, annotationConfig);
 
   // Compute effective animations with sequencing
