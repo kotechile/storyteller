@@ -21,6 +21,7 @@
     "zod": "4.3.6"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@remotion/eslint-config-flat": "4.0.484",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "19.2.7",
@@ -29,6 +30,8 @@
     "@vitejs/plugin-react": "^6.0.4",
     "eslint": "9.19.0",
     "prettier": "3.8.1",
+    "puppeteer-core": "^25.13.0",
+    "tsx": "^4.23.15",
     "typescript": "5.9.3",
     "vite": "^8.1.5"
   },
@@ -38,6 +41,13 @@
     "studio": "remotion studio src/index.ts",
     "app": "vite --port 3001 --open /studio.html",
     "generate": "npx tsx src/generateStoryFromUrl.ts",
+    "omnicast": "tsx src/omnicast.ts",
+    "mcp:serve": "tsx mcp/server.mts",
+    "mcp:test": "tsx scripts/test-mcp-server.ts",
+    "mcp:test:full": "tsx scripts/test-mcp-server.ts --generate",
+    "brag:sync": "node scripts/sync-brag-assets.mjs",
+    "brag:seed": "tsx scripts/seed-brag-llm-config.ts",
+    "youtube:auth": "tsx scripts/youtube-auth.ts",
     "build": "remotion bundle",
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc",
