@@ -53,7 +53,19 @@ export interface StorytellerConfig {
   aspect: AspectName;
   resolution: '1K' | '2K' | '4K';
 
-  voice: { enabled: boolean; voiceId: string; speed: number; modelId: string };
+  voice: {
+    enabled: boolean;
+    voiceId: string;
+    speed: number;
+    modelId: string;
+    /**
+     * ElevenLabs voice settings. These were previously hidden in the library as hardcoded fallbacks
+     * (0.5 / 0.75), so they could not be tuned without a code change; they are now configurable and
+     * default to those same values so nothing changes silently.
+     */
+    stability: number;
+    similarityBoost: number;
+  };
   music: { trackId: string };
   captions: boolean;
 
@@ -92,6 +104,9 @@ export function loadStorytellerConfig(env: NodeJS.ProcessEnv = process.env): Sto
       speed: num(env.STORYTELLER_VOICE_SPEED || env.OMNICAST_VOICE_SPEED, 0.95),
       // eleven_turbo_v2_5 does NOT return audio_base64 from /with-timestamps.
       modelId: str(env.STORYTELLER_TTS_MODEL, 'eleven_multilingual_v2'),
+      // Defaults match the library's previous hardcoded fallbacks exactly.
+      stability: num(env.STORYTELLER_VOICE_STABILITY, 0.5),
+      similarityBoost: num(env.STORYTELLER_VOICE_SIMILARITY, 0.75),
     },
     music: { trackId: str(env.STORYTELLER_MUSIC_TRACK) },
     captions: bool(env.STORYTELLER_CAPTIONS, true),

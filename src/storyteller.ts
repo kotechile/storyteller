@@ -79,6 +79,8 @@ export interface StorytellerRequest {
   voice?: boolean;
   voiceId?: string;
   speed?: number;
+  stability?: number;
+  similarityBoost?: number;
   research?: boolean;
   focusTopics?: string[];
   videoScenes?: boolean;
@@ -135,6 +137,8 @@ function applyOverrides(cfg: StorytellerConfig, req: StorytellerRequest): Storyt
       enabled: req.voice ?? cfg.voice.enabled,
       voiceId: req.voiceId ?? cfg.voice.voiceId,
       speed: req.speed ?? cfg.voice.speed,
+      stability: req.stability ?? cfg.voice.stability,
+      similarityBoost: req.similarityBoost ?? cfg.voice.similarityBoost,
     },
     storyboard: {
       ...cfg.storyboard,
@@ -492,7 +496,13 @@ export async function runStoryteller(
       setStatus('voice');
       sceneAudio = await synthesizePerSceneSpeech(
         manifest.scenes.map((s) => ({ sceneNumber: s.sceneNumber, narration: s.narration })),
-        { voiceId: cfg.voice.voiceId, speed: cfg.voice.speed, modelId: cfg.voice.modelId },
+        {
+          voiceId: cfg.voice.voiceId,
+          speed: cfg.voice.speed,
+          modelId: cfg.voice.modelId,
+          stability: cfg.voice.stability,
+          similarityBoost: cfg.voice.similarityBoost,
+        },
       );
       const silent = sceneAudio.filter((sa) => !sa.audioUrl);
       if (silent.length) {
@@ -760,6 +770,8 @@ function parseArgs(argv: string[]): StorytellerRequest {
       case '--voice': req.voice = true; break;
       case '--no-voice': req.voice = false; break;
       case '--speed': req.speed = Number(next()); break;
+      case '--stability': req.stability = Number(next()); break;
+      case '--similarity': req.similarityBoost = Number(next()); break;
       case '--research': req.research = true; break;
       case '--no-video': req.videoScenes = false; break;
       case '--video-max': req.videoMaxScenes = Number(next()); break;
@@ -788,6 +800,8 @@ Options (all optional; defaults come from .env via src/lib/storytellerConfig.ts)
   --aspect <ratio>    16:9 | 9:16 | 1:1
   --voice | --no-voice          Narration (ElevenLabs)
   --speed <n>         Narration speed (0.7–1.2)
+  --stability <n>     ElevenLabs voice stability 0–1 (default 0.5)
+  --similarity <n>    ElevenLabs similarity boost 0–1 (default 0.75)
   --research          Allow external research during storyboard planning
   --no-video          Skip Seedance animated scenes
   --video-max <n>     Cap animated scenes (cost guard)
