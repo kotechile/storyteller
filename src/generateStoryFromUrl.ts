@@ -37,7 +37,27 @@ async function main() {
   const targetUrl = process.argv[2] || 'https://techcrunch.com/article/ai-automation';
   const rawStyleArg = process.argv[3] || 'photo-realistic';
   const musicTrackId = process.argv[4] || ''; // --music <track-id>
-  const validStyles: ImageStylePreset[] = ['photo-realistic', 'illustration', 'whiteboard', 'chalkboard', 'chalk-drawing'];
+  const validStyles: ImageStylePreset[] = [
+    'technical-blueprint',
+    'modern-minimal',
+    'corporate-dashboard',
+    'whiteboard-sketch',
+    'dotted-notebook',
+    'pop-art-vector',
+    'retro-technical',
+    'chalkboard',
+    'photo-realistic',
+    'whiteboard',
+    'illustration',
+    'chalk-drawing',
+    'flowcharts-whiteboard',
+    'technical-scientific',
+    'step-by-step-guide',
+    'modular-explainer',
+    'timeline-historical',
+    'data-visualization',
+    'playful-menu-listicle',
+  ];
   const imageStyle: ImageStylePreset = validStyles.includes(rawStyleArg as ImageStylePreset) ? (rawStyleArg as ImageStylePreset) : 'photo-realistic';
   const allowResearchArg = process.argv.includes('--research') || process.argv.includes('-r');
   let allowResearch = allowResearchArg;

@@ -20,3 +20,17 @@ backend/venv/
 
 # Hermes agent local state
 .hermes/
+
+# OmniCast runs (plans, captures, renders, share copy) — regenerated constantly
+runs/
+
+# Generated images (nano-banana / kie.ai output) — large, regenerated constantly
+public/generated_assets/
+public/runs/
+
+# Brag skill assets synced into public/ by scripts/sync-brag-assets.mjs
+public/brag/
+
+# YouTube OAuth refresh token minted by scripts/youtube-auth.ts — a standing credential.
+# This repo has secret-scanning push protection; never let this file be staged.
+.youtube-refresh-token

@@ -113,9 +113,15 @@ export const SceneCanvas: React.FC<SceneCanvasProps> = ({
   const manifestMeta = (scene as unknown as { meta?: { stylePreset?: string } }).meta;
   const sceneStylePreset = (scene as unknown as { stylePreset?: string }).stylePreset;
   const isWhiteboard = manifestMeta?.stylePreset === 'whiteboard' ||
+    manifestMeta?.stylePreset === 'whiteboard-sketch' ||
+    manifestMeta?.stylePreset === 'dotted-notebook' ||
+    manifestMeta?.stylePreset === 'flowcharts-whiteboard' ||
     manifestMeta?.stylePreset === 'chalkboard' ||
     manifestMeta?.stylePreset === 'chalk-drawing' ||
     sceneStylePreset === 'whiteboard' ||
+    sceneStylePreset === 'whiteboard-sketch' ||
+    sceneStylePreset === 'dotted-notebook' ||
+    sceneStylePreset === 'flowcharts-whiteboard' ||
     sceneStylePreset === 'chalkboard' ||
     sceneStylePreset === 'chalk-drawing';
   const totalDelayFrames = isProgrammatic

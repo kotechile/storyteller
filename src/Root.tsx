@@ -21,6 +21,11 @@ import { CallToAction, CallToActionSchema } from "./compositions/CallToAction";
 import { ExplainerStoryComposition } from "./compositions/storyteller/ExplainerStoryComposition";
 import { explainerCompositionSchema } from "./types/storyboard";
 
+// Brag promo (URL → promote + explain). Own composition: a 15-25s beat-driven vertical short.
+import { BragPromo } from "./compositions/brag/BragPromo";
+import { bragPromoCompositionSchema, type BragPromoProps } from "./types/bragPromo";
+import { SAMPLE_BRAG_PROPS } from "./lib/bragSampleProps";
+
 loadFont();
 
 // ── Load latest pipeline output for Remotion Studio preview ──
@@ -90,6 +95,32 @@ export const RemotionRoot: React.FC = () => {
             scenes: [],
           },
           sceneAudio: undefined,
+        }}
+      />
+
+      {/* Brag promo — URL → promote + explain, vertical short */}
+      <Composition
+        id="BragPromo"
+        component={BragPromo}
+        fps={DEFAULT_FPS}
+        width={1080}
+        height={1920}
+        durationInFrames={480}
+        schema={bragPromoCompositionSchema}
+        defaultProps={SAMPLE_BRAG_PROPS as unknown as BragPromoProps}
+        calculateMetadata={async ({ props }: { props: BragPromoProps }) => {
+          const scenes = props.brag?.scenes ?? [];
+          // Sum the SAME per-scene rounding alignStoryboardWithTimestamps uses, so the final scene
+          // is never clipped by a frame of rounding drift.
+          const totalFrames = scenes.reduce(
+            (acc, s) => acc + Math.max(Math.round((Number(s.seconds) || 0) * DEFAULT_FPS), 30),
+            0,
+          );
+          return {
+            durationInFrames: Math.max(totalFrames, 60),
+            width: props.brag?.width ?? 1080,
+            height: props.brag?.height ?? 1920,
+          };
         }}
       />
 

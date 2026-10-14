@@ -285,6 +285,11 @@ export async function resolveLlmModel(taskRole?: string): Promise<ResolvedLlmCon
             modelName,
             provider,
             apiKey,
+            // NOTE: `baseUrl` MUST be a *chat-completions* base — every consumer appends
+            // '/chat/completions' (narrativeEngine.buildChatCompletionsUrl, dinoPromptRefiner).
+            // kie.ai's Claude exposes the Anthropic Messages API at /claude/v1/messages instead,
+            // so it is routed explicitly in narrativeEngine.callLlm() and deliberately leaves this
+            // field undefined rather than handing callers an endpoint they would mangle.
             baseUrl:
               model.base_url ||
               (provider === 'deepseek' ? 'https://api.deepseek.com/v1' : undefined),

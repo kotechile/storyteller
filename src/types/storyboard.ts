@@ -152,9 +152,45 @@ export interface StoryboardScene {
   detectedImageHeight?: number;
   /** Per-scene camera instruction (overrides composition-level camera for this scene) */
   camera?: CameraInstruction;
+  /** Automatically selected diagram type for this scene (timeline, step_by_step, flowchart, modular_hub, data_viz, technical_schematic, comparison, cinematic_metaphor) */
+  diagramType?: DiagramType;
 }
 
-export type ImageStylePreset = 'photo-realistic' | 'illustration' | 'whiteboard' | 'chalkboard' | 'chalk-drawing';
+export type DiagramType =
+  | 'timeline'
+  | 'step_by_step'
+  | 'flowchart'
+  | 'modular_hub'
+  | 'data_viz'
+  | 'technical_schematic'
+  | 'comparison'
+  | 'cinematic_metaphor';
+
+export type ImageStylePreset =
+  // 1. The Analytic Styles (For Data & Tech)
+  | 'technical-blueprint'
+  | 'modern-minimal'
+  | 'corporate-dashboard'
+  // 2. The Creative & Organic Styles (For Process & Strategy)
+  | 'whiteboard-sketch'
+  | 'dotted-notebook'
+  | 'pop-art-vector'
+  // 3. The Vintage & Textured Styles (For History & Guides)
+  | 'retro-technical'
+  | 'chalkboard'
+  // Cinematic / Real-world
+  | 'photo-realistic'
+  // Backward-compatible aliases
+  | 'whiteboard'
+  | 'illustration'
+  | 'chalk-drawing'
+  | 'flowcharts-whiteboard'
+  | 'technical-scientific'
+  | 'step-by-step-guide'
+  | 'modular-explainer'
+  | 'timeline-historical'
+  | 'data-visualization'
+  | 'playful-menu-listicle';
 export type StoryStylePreset = ImageStylePreset | 'cinematic' | 'flat-vector' | 'infographic';
 
 export interface CameraInstruction {
@@ -385,13 +421,46 @@ export const storyboardSceneSchema = z.object({
     durationFrames: z.number(),
     targetElementId: z.string().optional(),
   }).optional(),
+  diagramType: z.enum([
+    'timeline',
+    'step_by_step',
+    'flowchart',
+    'modular_hub',
+    'data_viz',
+    'technical_schematic',
+    'comparison',
+    'cinematic_metaphor'
+  ]).optional(),
 });
 
 export const storyboardManifestSchema = z.object({
   meta: z.object({
     title: z.string(),
     targetDuration: z.number(),
-    stylePreset: z.enum(['photo-realistic', 'illustration', 'chalkboard', 'chalk-drawing', 'cinematic', 'flat-vector', 'whiteboard', 'infographic']),
+    stylePreset: z.enum([
+      'technical-blueprint',
+      'modern-minimal',
+      'corporate-dashboard',
+      'whiteboard-sketch',
+      'dotted-notebook',
+      'pop-art-vector',
+      'retro-technical',
+      'chalkboard',
+      'photo-realistic',
+      'whiteboard',
+      'illustration',
+      'chalk-drawing',
+      'flowcharts-whiteboard',
+      'technical-scientific',
+      'step-by-step-guide',
+      'modular-explainer',
+      'timeline-historical',
+      'data-visualization',
+      'playful-menu-listicle',
+      'cinematic',
+      'flat-vector',
+      'infographic',
+    ]),
     primaryColor: z.string().optional(),
     fontFamily: z.string().optional(),
   }),

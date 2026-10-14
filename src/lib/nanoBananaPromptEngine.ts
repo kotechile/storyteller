@@ -1,6 +1,14 @@
 import { ImageStylePreset } from '../types/storyboard';
 
-export type InfographicType = 'workflow' | 'architecture' | 'comparative' | 'decision_tree' | 'generic';
+export type InfographicType =
+  | 'workflow'
+  | 'timeline'
+  | 'architecture'
+  | 'comparative'
+  | 'decision_tree'
+  | 'data_viz'
+  | 'technical_schematic'
+  | 'generic';
 
 export interface StructuredImagePromptComponents {
   subject: string;
@@ -31,23 +39,38 @@ export const INFOGRAPHIC_TYPE_TEMPLATES: Record<
 > = {
   workflow: {
     metaphor: 'an isometric workflow pipeline diagram',
-    layout: 'flowing left-to-right with sequential stages connected by directional arrows',
+    layout: 'flowing left-to-right with sequential numbered stages connected by directional arrows',
     primary: 'the first and final pipeline stages',
   },
+  timeline: {
+    metaphor: 'a chronological timeline milestone diagram',
+    layout: 'a clean horizontal spine line with sequential date badges, circular milestone nodes, and structured callout cards',
+    primary: 'the chronological progression of key milestones',
+  },
   architecture: {
-    metaphor: 'a clean flat-design architecture map',
-    layout: 'a central hub with component containers branching outward via secure connection lines',
+    metaphor: 'a modular system architecture map',
+    layout: 'a central hub with subsystem component containers branching outward via secure connector lines',
     primary: 'the central hub component',
   },
   comparative: {
     metaphor: 'a split-screen comparative matrix',
-    layout: 'two or three columns side by side using visual checkmarks, radar charts, and concise feature lists',
+    layout: 'two or three columns side by side using visual checkmarks, metric bars, and concise feature lists',
     primary: 'the two or three items being compared',
   },
   decision_tree: {
     metaphor: 'a minimalist decision tree flowchart',
-    layout: 'a starting node at the top branching downward into distinct decision outcomes via labeled paths',
+    layout: 'a starting node at the top branching downward into distinct decision outcomes via labeled logic paths',
     primary: 'the starting decision node',
+  },
+  data_viz: {
+    metaphor: 'a structured data visualization dashboard',
+    layout: 'a balanced grid containing key metric KPI cards, bar charts, and tabular data blocks',
+    primary: 'the core metrics and data trends',
+  },
+  technical_schematic: {
+    metaphor: 'a high-precision technical schematic and cross-section diagram',
+    layout: 'isometric or cutaway view of the system with fine technical blueprint lines and numbered callout pins',
+    primary: 'the internal mechanism and component grounding',
   },
   generic: {
     metaphor: 'a structured infographic',
@@ -68,6 +91,10 @@ export const PHOTOGRAPHIC_TYPE_TEMPLATES: Record<
     metaphor: 'a sequential photographic sequence',
     layout: 'a series of real-world scenes arranged left-to-right, each depicting one stage of the process, with a clear visual progression between them',
   },
+  timeline: {
+    metaphor: 'a chronological photographic documentary sequence',
+    layout: 'a left-to-right chronological progression of real-world scenes capturing the historical or technical evolution over time',
+  },
   architecture: {
     metaphor: 'a cinematic environmental portrait of a system',
     layout: 'a wide establishing shot where the central subject is in sharp focus and supporting components are arranged naturally around it in the frame',
@@ -80,6 +107,14 @@ export const PHOTOGRAPHIC_TYPE_TEMPLATES: Record<
     metaphor: 'a photographic branching sequence',
     layout: 'a real-world scene with clearly distinct visual paths leading to different outcomes, arranged top-to-bottom with the starting point prominent',
   },
+  data_viz: {
+    metaphor: 'a real-world mission control or executive dashboard view',
+    layout: 'a sharp perspective shot of diagnostic telemetry and operational metric screens arranged in a modern control room',
+  },
+  technical_schematic: {
+    metaphor: 'a realistic engineering laboratory or industrial workshop view',
+    layout: 'a crisp close-up focus on real-world machinery, hardware, or biological specimen with contextual diagnostic equipment',
+  },
   generic: {
     metaphor: 'a cinematic photographic scene',
     layout: 'a well-composed real-world scene with a clear focal subject and contextual supporting elements in the frame',
@@ -90,20 +125,57 @@ export const PHOTOGRAPHIC_TYPE_TEMPLATES: Record<
  * Positive style constraints hardcoded into the payload as mandated by Nano Banana Pro specifications.
  */
 export const NANO_BANANA_POSITIVE_CONSTRAINTS: Record<string, string> = {
-  illustration:
-    'Use a strictly muted, professional corporate vector color palette with a maximum of three colors (navy blue #0f172a, crisp teal #0284c7, and pure white #ffffff). All visual elements must be cohesive, clean, flat graphic design, zero drop shadows, zero noise, high contrast typography, isolated on a pure white background hex #ffffff.',
-  infographic:
-    'Use a professional data-visualization color palette (deep navy #0f172a, vivid cyan #0891b2, emerald #059669, warm amber #f59e0b) with high contrast against a pure white background. Render crisp charts, icons, and structured layout blocks with clean geometric connector lines. Zero drop shadows, zero noise, zero background textures, high legibility.',
-  'flat-vector':
-    'Use a modern flat vector palette (navy #1e3a5f, teal #14b8a6, coral #fb7185, warm gray #94a3b8) with subtle flat gradients. All visual elements must be cohesive, clean geometric shapes, crisp outlines, high contrast typography, isolated on a pure white background hex #ffffff.',
+  // 1. The Analytic Styles (For Data & Tech)
+  'technical-blueprint':
+    'Use a monochromatic technical blueprint color palette (deep blueprint navy #0c2340, crisp blueprint cyan #06b6d4, pure white #ffffff). High-precision vector blueprint lines, technical cross-sections, fine engineering grid background, geometric callout pins, realistic grounding, zero noise, high contrast, zero smudges.',
+  'modern-minimal':
+    'Use a modern minimal high-contrast 3-color palette (deep charcoal #18181b, vivid electric cobalt #2563eb, pure white #ffffff). Solid block backgrounds, bold sans-serif typographic hierarchy, clean geometric shapes, generous negative space, flat vector icons, zero drop shadows, zero noise.',
+  'corporate-dashboard':
+    'Use a clean corporate executive color palette (deep navy #0f172a, crisp teal #0d9488, slate #64748b, pure white #ffffff). Structured grid layout, clean flat iconography, subtle card containers, professional data presentation, high legibility, zero clutter.',
+
+  // 2. The Creative & Organic Styles (For Process & Strategy)
+  'whiteboard-sketch':
+    'Use an authentic dry-erase whiteboard marker palette (deep black #1e293b, whiteboard navy #1d4ed8, marker green #15803d, marker red #b91c1c) on a pristine glossy white surface. Organic hand-drawn stroke textures, casual brainstorm sketch nodes, branching flowchart arrows, scribbled callouts, zero smudges.',
+  'dotted-notebook':
+    'Use an authentic dotted-notebook sketch palette on warm ivory paper (#fefefe) with a subtle dot-matrix grid (#cbd5e1). Fine ink linework in midnight blue (#1e3a8a) and graphite pencil (#475569), organic hand-drawn shapes, notebook flowchart nodes, casual brainstorm scribbles, high clarity.',
+  'pop-art-vector':
+    'Use a vibrant saturated pop-art color palette (sunshine yellow #facc15, hot punch pink #f43f5e, electric cyan #06b6d4, vivid green #22c55e, heavy solid black ink outlines #09090b). Bold comic-style flat shading, playful stylized graphic elements, energetic vector icons, dynamic viral aesthetic.',
+
+  // 3. The Vintage & Textured Styles (For History & Guides)
+  'retro-technical':
+    'Use a vintage technical user-manual and field-guide color palette (aged cream background #fef9c3, deep sepia #78350f, weathered navy #1e293b, forest olive #14532d). Lightly aged parchment texture, retro technical engraving linework, fine crosshatch shading, period-accurate diagram typography, authentic historical handbook feel.',
+  chalkboard:
+    'Use an authentic academic chalkboard palette on a dusty slate-black textured background (#18181b). High-contrast chalk lines in powdery white (#f8fafc) and soft pastel yellow (#fef08a), gentle chalk dust textures, hand-drawn geometric diagram lines, classroom chalkboard feel.',
+
+  // Photographic / Cinematic
   'photo-realistic':
     'Use a strictly muted, professional cinematic color palette with controlled lighting and soft filmic tones. All visual elements must be cohesive, shallow depth of field, authentic 35mm photography aesthetic, zero harsh oversaturation.',
+
+  // Aliases & Backward Compatibility
   whiteboard:
     'Use a strictly muted, professional dry-erase whiteboard color palette with black, navy blue, and green markers on a pristine glossy white surface. All line art elements must be cohesive, clean vector stroke lines, zero smudges.',
-  chalkboard:
-    'Use a strictly muted slate-grey chalkboard palette with soft white and subtle yellow chalk textures. All line art elements must be cohesive academic diagrams.',
+  'flowcharts-whiteboard':
+    'Use a dry-erase whiteboard marker palette on glossy white surface with organic hand-drawn arrows and brainstorm nodes.',
+  'technical-scientific':
+    'Use a high-precision technical schematic color palette (slate #1e293b, electric cyan #06b6d4, cobalt blue #2563eb, crisp white #ffffff). Clean vector technical blueprint lines, cross-sections, callouts, realistic component grounding.',
+  'step-by-step-guide':
+    'Use an instructional guide palette with clean accents. Clear numbered step indicators, directional flow arrows, distinct action stages.',
+  'modular-explainer':
+    'Use a modern modular system palette on pure white. Clear central hub node, radiating modular cards, clean connecting buses.',
+  'timeline-historical':
+    'Use an editorial timeline color palette. Distinct sequential milestone nodes, chronological flow line, date markers.',
+  'data-visualization':
+    'Use an executive data visualization palette on pure white. Crisp bar charts, metric stat cards, structured grid layout.',
+  'playful-menu-listicle':
+    'Use a vibrant playful pop-art color palette with fun doodle stickers, illustrated listicle cards, and cheerful icons.',
+  illustration:
+    'Use a strictly muted, professional corporate vector color palette with clean flat graphic design on pure white hex #ffffff.',
+  infographic:
+    'Use a professional data-visualization color palette with high contrast against pure white background.',
+  'flat-vector':
+    'Use a modern flat vector palette with subtle flat gradients and clean geometric shapes.',
   'chalk-drawing':
-    'Use a strictly muted pastel chalk palette on smooth textured board. All visual elements must be cohesive.',
+    'Use a strictly muted pastel chalk palette on smooth textured board.',
 };
 
 /** Shared infographic core-principles block (guide: "Core Principles of Infographic Prompting"). */
@@ -120,16 +192,25 @@ const PHOTOGRAPHIC_CORE_PRINCIPLES =
  */
 export function inferInfographicType(rawPrompt: string): InfographicType {
   const p = rawPrompt.toLowerCase();
+  if (/\b(timeline|chronolog|history|historical|milestone|over time|year|decade|century|evolution|origins)\b/.test(p)) {
+    return 'timeline';
+  }
+  if (/\b(metric|data|kpi|scrum|financial|revenue|cost|stat|dashboard|summary|analytics|csv|table)\b/.test(p)) {
+    return 'data_viz';
+  }
+  if (/\b(schematic|cross[- ]section|physics|biological|kubernetes|pod|hardware|circuit|mechanism|anatomy)\b/.test(p)) {
+    return 'technical_schematic';
+  }
   if (/\b(compare|comparison|versus|vs\.?|side[- ]by[- ]side|split[- ]screen|contrast|trade[- ]?off|pros and cons|difference between)\b/.test(p)) {
     return 'comparative';
   }
   if (/\b(decision|flowchart|if\b|then\b|branch|criteria|threshold|approval|reject|choose|whether)\b/.test(p)) {
     return 'decision_tree';
   }
-  if (/\b(architecture|stack|microservice|infrastructure|server|backend|component|system design|topology)\b/.test(p)) {
+  if (/\b(architecture|stack|microservice|infrastructure|server|backend|component|system design|topology|modular|central hub)\b/.test(p)) {
     return 'architecture';
   }
-  if (/\b(pipeline|workflow|process|flow|steps?|stages?|sequential|phase|lifecycle|funnel)\b/.test(p)) {
+  if (/\b(pipeline|workflow|process|flow|steps?|stages?|sequential|phase|lifecycle|funnel|recipe|guide|how to)\b/.test(p)) {
     return 'workflow';
   }
   return 'generic';
@@ -237,13 +318,35 @@ export function parsePromptToComponents(
 
   if (stylePreset === 'photo-realistic') {
     style = 'cinematic 35mm photography with natural lighting';
-  } else if (stylePreset === 'whiteboard') {
-    style = 'clean dry-erase whiteboard line art';
+  } else if (stylePreset === 'technical-blueprint') {
+    style = 'monochromatic technical blueprint schematic on deep navy grid with fine vector lines';
+  } else if (stylePreset === 'modern-minimal') {
+    style = 'modern minimal high-contrast layout with bold 3-color palette and sans-serif typography';
+  } else if (stylePreset === 'corporate-dashboard') {
+    style = 'clean corporate dashboard grid with executive palette and flat iconography';
+  } else if (stylePreset === 'whiteboard-sketch' || stylePreset === 'whiteboard' || stylePreset === 'flowcharts-whiteboard') {
+    style = 'organic hand-drawn dry-erase whiteboard sketch with marker strokes and brainstorming arrows';
+  } else if (stylePreset === 'dotted-notebook') {
+    style = 'organic notebook sketch with fine pen linework on ivory dotted-grid paper';
+  } else if (stylePreset === 'pop-art-vector') {
+    style = 'vibrant pop-art vector illustration with heavy black ink outlines and bold flat shading';
+  } else if (stylePreset === 'retro-technical') {
+    style = 'vintage user manual and technical field guide engraving on textured cream parchment';
   } else if (stylePreset === 'chalkboard' || stylePreset === 'chalk-drawing') {
-    style = 'academic chalk line art on dark slate';
-  } else if (stylePreset === 'infographic') {
-    style = 'crisp flat data-visualization infographic with charts and icons';
-  } else if (stylePreset === 'flat-vector') {
+    style = 'academic chalk line art on dark slate blackboard with soft chalk textures';
+  } else if (stylePreset === 'technical-scientific') {
+    style = 'high-precision technical blueprint and scientific diagram with isometric schematic grounding';
+  } else if (stylePreset === 'step-by-step-guide') {
+    style = 'sequential step-by-step instructional workflow illustration with numbered stage panels';
+  } else if (stylePreset === 'modular-explainer') {
+    style = 'modular system architecture explainer with central hub and connected subsystem modules';
+  } else if (stylePreset === 'timeline-historical') {
+    style = 'chronological timeline and historical milestone diagram with date badges and event spine';
+  } else if (stylePreset === 'data-visualization' || stylePreset === 'infographic') {
+    style = 'crisp flat data-visualization dashboard with structured KPI cards and metric charts';
+  } else if (stylePreset === 'playful-menu-listicle') {
+    style = 'playful pop-art illustrated menu and listicle graphics with fun stickers and bold outlines';
+  } else if (stylePreset === 'flat-vector' || stylePreset === 'illustration') {
     style = 'modern flat vector illustration with clean geometric shapes';
   }
 
@@ -270,8 +373,19 @@ export function parsePromptToComponents(
   const metaphorMatch = rawPrompt.match(/(?:Visual Metaphor|Metaphor):\s*([^.]+)/i);
   if (metaphorMatch) visualMetaphor = metaphorMatch[1].trim();
 
-  // Infer infographic type from wording
-  const infographicType = inferInfographicType(rawPrompt);
+  // Infer infographic type from wording, with fallback based on stylePreset
+  let infographicType = inferInfographicType(rawPrompt);
+  if (infographicType === 'generic') {
+    if (stylePreset === 'step-by-step-guide' || stylePreset === 'timeline-historical') {
+      infographicType = 'workflow';
+    } else if (stylePreset === 'modular-explainer' || stylePreset === 'technical-scientific') {
+      infographicType = 'architecture';
+    } else if (stylePreset === 'flowcharts-whiteboard') {
+      infographicType = 'decision_tree';
+    } else if (stylePreset === 'data-visualization') {
+      infographicType = 'comparative';
+    }
+  }
 
   return {
     subject,

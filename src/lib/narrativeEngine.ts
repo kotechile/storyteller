@@ -1,5 +1,34 @@
 import { resolveLlmModel } from './supabaseClient';
-import { ArticleData, StoryboardManifest, StoryboardScene, StoryStylePreset, storyboardManifestSchema } from '../types/storyboard';
+import { ArticleData, StoryboardManifest, StoryboardScene, StoryStylePreset, storyboardManifestSchema, DiagramType } from '../types/storyboard';
+
+/**
+ * Automatically infers the most suitable explanatory diagram type from a scene's narration text.
+ */
+export function inferDiagramTypeFromNarration(narration: string): DiagramType {
+  const p = narration.toLowerCase();
+  if (/\b(timeline|chronolog|history|historical|milestone|over time|years? ago|in 19\d\d|in 20\d\d|evolution|origins|originally|decades?)\b/.test(p)) {
+    return 'timeline';
+  }
+  if (/\b(step[- ]by[- ]step|recipe|guide|workflow|stage|how to|first step|next step|finally|phases?|procedure)\b/.test(p)) {
+    return 'step_by_step';
+  }
+  if (/\b(decision|flowchart|if\b|then\b|branch|criteria|threshold|approval|reject|choose|whether|options?)\b/.test(p)) {
+    return 'flowchart';
+  }
+  if (/\b(metric|data|kpi|scrum|financial|revenue|cost|stat|dashboard|summary|analytics|csv|table|percent|%|dollar|\$)\b/.test(p)) {
+    return 'data_viz';
+  }
+  if (/\b(schematic|cross[- ]section|physics|biological|kubernetes|pod|hardware|circuit|mechanism|anatomy|engine|internal)\b/.test(p)) {
+    return 'technical_schematic';
+  }
+  if (/\b(compare|comparison|versus|vs\.?|side[- ]by[- ]side|split[- ]screen|contrast|trade[- ]?off|pros and cons|difference between|on the other hand)\b/.test(p)) {
+    return 'comparison';
+  }
+  if (/\b(beyond the numbers|truth is|quietly|feels? like|imagine|human|heart|emotional|spark|fear|hope)\b/.test(p)) {
+    return 'cinematic_metaphor';
+  }
+  return 'modular_hub';
+}
 import { fetchWithRetry } from './ingest';
 
 export interface NarrativeEngineOptions {
@@ -276,6 +305,23 @@ When generating explanatory infographic and diagram scenes, follow the SCVD Form
 - Data Points: List sequential steps, comparisons, or key metrics to map out. Keep text density low by substituting paragraphs with concise labels, data points, and universally recognized icons.
 
 ═══════════════════════════════════════
+AUTOMATIC DIAGRAM TYPE AUTO-SELECTION (CRITICAL)
+═══════════════════════════════════════
+
+The user has selected the aesthetic style preset: "${stylePreset}". DO NOT use the same diagram layout for all scenes. Instead, you MUST automatically classify and assign the ideal "diagramType" for EACH scene based on what that scene's narration explains:
+
+1. "timeline" — Chronological sequence tracking events, dates, historical origins, evolution over time, or milestones.
+2. "step_by_step" — Sequential workflow process, recipe/DIY instructions, ordered action phases with numbered stage badges (Step 1, Step 2, Step 3).
+3. "flowchart" — Decision tree, condition checks, if/then branching logic, and decision criteria paths.
+4. "modular_hub" — Central core hub with connected peripheral subsystem containers and bus lines showing complex system architecture.
+5. "data_viz" — Raw metrics, KPI cards, bar charts, financial summaries, scrum boards, or table layouts.
+6. "technical_schematic" — Physical or engineering concepts, cross-sections, hardware/pod anatomy, and grounded scientific diagrams.
+7. "comparison" — Split-screen side-by-side matrices comparing two or three options, trade-offs, before-and-after, or pros vs cons.
+8. "cinematic_metaphor" — Atmospheric visual metaphor or emotional moment (interlude).
+
+Include "diagramType" in every scene JSON object.
+
+═══════════════════════════════════════
 THE VISUAL TEST & CONTRAST TEST (CRITICAL)
 ═══════════════════════════════════════
 
@@ -381,6 +427,7 @@ Respond STRICTLY with a valid JSON object matching this structure. Note the imag
     },
     {
       "sceneNumber": 1,
+      "diagramType": "modular_hub",
       "narration": "Narration text spoken during this scene...",
       "duration": 12,
       "animationStrategy": "programmatic",
@@ -548,6 +595,22 @@ export function buildChatCompletionsUrl(baseUrl?: string, provider = 'openai'): 
 
 export async function callLlm(llmConfig: any, prompt: string, jsonMode = false): Promise<string> {
   const provider = (llmConfig.provider || 'deepseek').toLowerCase();
+
+  // kie.ai's Claude speaks the Anthropic Messages API at /claude/v1/messages — it must NOT go
+  // through buildChatCompletionsUrl(), which appends '/chat/completions' and would 404. It is also
+  // the one provider whose failures arrive with HTTP 200, so route it through the dedicated client
+  // that validates response shape rather than status.
+  if (provider === 'kie.ai' || provider === 'kie') {
+    const { callClaude } = await import('./kieClaude');
+    const instruction = jsonMode
+      ? '\n\nRespond with ONLY a single valid JSON object. No prose, no markdown fences.'
+      : '';
+    const result = await callClaude({
+      messages: [{ role: 'user', content: prompt + instruction }],
+      model: llmConfig.modelName,
+    });
+    return result.text;
+  }
 
   let endpoint = '';
   let headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -852,14 +915,93 @@ export async function refineImagePromptsWithArtDirector(
     if (imageElements.length === 0) continue;
 
     const styleInstructions: Record<string, string> = {
-      'whiteboard': 'High-key lighting, bright glossy white background, dry-erase marker illustration style, hand-drawn vector arrows in blue, black, red, and green, casual brainstorming aesthetic, minimal shading',
-      'chalkboard': 'Dusty slate black background, textured chalk-like hand-drawn lines in stark white and pastel yellow, smudged erasures, educational and academic aesthetic, raw and unpolished geometry',
-      'chalk-drawing': 'Dusty slate black background, textured chalk-like hand-drawn lines in stark white and pastel yellow, smudged erasures, educational and academic aesthetic, raw and unpolished geometry',
-      'photo-realistic': 'cinematic 35mm film photography, natural environmental lighting with shallow depth of field, authentic real-world scenes with human context and emotional resonance, rich color grading with filmic contrast, shot on high-end DSLR with wide aperture, evocative compositions that tell a visual story',
-      'illustration': 'flat vector illustration style on white background, bold colorful sans-serif labels, clean geometric connector lines',
-    };
-    const styleGuide = styleInstructions[stylePreset] || styleInstructions['whiteboard'];
+      // 1. The Analytic Styles (For Data & Tech)
+      'technical-blueprint': 'Monochromatic technical blueprint on deep navy background with fine blueprint grid lines, architectural cross-sections, and precise geometric callout pins. Monochromatic cyan and white vector linework, high engineering precision.',
+      'modern-minimal': 'High-contrast modern minimal layout using a strict 3-color palette (charcoal #18181b, electric cobalt #2563eb, pure white #ffffff). Solid block backgrounds, bold sans-serif typography, generous negative space, flat vector icons.',
+      'corporate-dashboard': 'Clean professional corporate grid featuring corporate blues, teals, and slate grays with flat iconography, structured card containers, and executive legibility.',
 
+      // 2. The Creative & Organic Styles (For Process & Strategy)
+      'whiteboard-sketch': 'Hand-drawn shapes, scribbled arrows, and handwritten text that looks like a live brainstorming session on a glossy dry-erase whiteboard with black, navy, and green marker ink.',
+      'dotted-notebook': 'Organic, casual illustrations and flowcharts rendered on an ivory background with a subtle dot-matrix grid, fine ink linework in midnight blue and graphite, and hand-drawn process nodes.',
+      'pop-art-vector': 'Vibrant saturated pop-art colors (sunshine yellow, hot pink, cyan) with heavy dark outlines, flat comic shading, and playful stylized character graphics.',
+
+      // 3. The Vintage & Textured Styles (For History & Guides)
+      'retro-technical': 'Muted tones (cream, sepia, navy) with vintage textures, looking like an old user manual or field guide with fine engraving crosshatch details on aged parchment.',
+      'chalkboard': 'High-contrast white or colored chalk aesthetics layered over a dark, textured slate blackboard with powdery chalk lines and academic drawings.',
+
+      // Photographic / Cinematic
+      'photo-realistic': 'cinematic 35mm film photography, natural environmental lighting with shallow depth of field, authentic real-world scenes with human context and emotional resonance, rich color grading with filmic contrast, shot on high-end DSLR with wide aperture, evocative compositions that tell a visual story',
+
+      // Backward-compatible Aliases
+      'whiteboard': 'Hand-drawn shapes, scribbled arrows, and handwritten text that looks like a live brainstorming session on a glossy dry-erase whiteboard with black, navy, and green marker ink.',
+      'flowcharts-whiteboard': 'Hand-drawn styles, notebook-paper flowcharts, and whiteboard layouts that mimic organic brainstorming.',
+      'technical-scientific': 'Explanations of physics concepts, technical systems like Kubernetes pods, or biological processes using real-world data and grounding.',
+      'step-by-step-guide': 'Visual instructions showing processes like cooking recipes or DIY workflows. Numbered sequence cards, directional arrows.',
+      'modular-explainer': 'Central hubs with connected components designed to show how a complex system works.',
+      'timeline-historical': 'Sequential charts tracking events or sports histories with precise data rendering.',
+      'data-visualization': 'Visuals transformed from raw metrics or CSV data into structured layouts like scrum boards or financial summaries.',
+      'playful-menu-listicle': 'Lighthearted, illustrated menus, humorous life steps, or pop-art graphics.',
+      'illustration': 'flat vector illustration style on white background, bold colorful sans-serif labels, clean geometric connector lines',
+      'chalk-drawing': 'Dusty slate black background, textured chalk-like hand-drawn lines in stark white and pastel yellow, smudged erasures, educational and academic aesthetic',
+    };
+    const styleGuide = styleInstructions[stylePreset] || styleInstructions['whiteboard-sketch'] || styleInstructions['whiteboard'];
+
+    const sceneDiagramType: DiagramType =
+      (scene as any).diagramType || inferDiagramTypeFromNarration(scene.narration);
+    (scene as any).diagramType = sceneDiagramType;
+
+    const diagramTypeGuides: Record<DiagramType, { label: string; metaphor: string; layout: string; details: string }> = {
+      timeline: {
+        label: 'Timelines & Historical Overviews',
+        metaphor: 'a chronological timeline and milestone sequence',
+        layout: 'a clean horizontal or zigzagging central spine line with sequential date badges, circular milestone nodes, and structured event callout cards tracking evolution over time',
+        details: 'Render a clear chronological milestone spine with distinct sequential nodes, year/period markers, and event summary tags.',
+      },
+      step_by_step: {
+        label: 'Step-by-Step Guides & Process Workflows',
+        metaphor: 'an isometric workflow pipeline diagram',
+        layout: 'ordered stage panels with prominent step badges (Step 1, Step 2, Step 3), directional workflow arrows, and ingredient or action breakdowns',
+        details: 'Render numbered sequential stage cards connected by directional flow arrows showing clear progress from start to completion.',
+      },
+      flowchart: {
+        label: 'Flowcharts & Decision Trees',
+        metaphor: 'a branching decision tree and process flowchart',
+        layout: 'a top-down or branching flowchart with starting conditions, decision logic boxes, if/then branches, and labeled outcome connectors',
+        details: 'Render decision diamond/box nodes branching into distinct conditional logic paths with clear outcome pathways.',
+      },
+      modular_hub: {
+        label: 'Modular Systems & Central Hub Architecture',
+        metaphor: 'a modular system architecture map with a central hub',
+        layout: 'a prominent central core hub node with radiating peripheral subsystem containers connected via structured bus lines',
+        details: 'Render a central core hub surrounded by connected modular subsystem blocks with clean connector buses.',
+      },
+      data_viz: {
+        label: 'Data Visualizations & Metric Dashboards',
+        metaphor: 'a structured data visualization dashboard',
+        layout: 'a balanced grid containing key metric KPI cards, bar charts, trend curves, and structured table summary cards',
+        details: 'Render structured KPI metric cards, comparative bar charts, and clean tabular data blocks with high readability.',
+      },
+      technical_schematic: {
+        label: 'Technical & Scientific Schematics',
+        metaphor: 'a high-precision technical schematic and cross-section diagram',
+        layout: 'an isometric cross-section or cutaway schematic with fine technical linework, component grounding, and numbered callout pins',
+        details: 'Render an engineering cross-section or biological schematic with fine precision linework, component callout pins, and structural realism.',
+      },
+      comparison: {
+        label: 'Comparative Matrices & Trade-offs',
+        metaphor: 'a split-screen comparative matrix',
+        layout: 'two or three side-by-side columns contrasting features, pros vs cons, before vs after, or trade-off indicators',
+        details: 'Render a side-by-side comparative matrix with clear vertical dividing line, contrasting columns, and checkmark/metric indicators.',
+      },
+      cinematic_metaphor: {
+        label: 'Atmospheric Visual Metaphor',
+        metaphor: 'an evocative visual metaphor',
+        layout: 'a cinematic scene depicting the central conceptual tension and human context',
+        details: 'Render an evocative metaphorical scene with emotional resonance and atmospheric grounding.',
+      },
+    };
+
+    const activeDiagramGuide = diagramTypeGuides[sceneDiagramType] || diagramTypeGuides.modular_hub;
     const isCinematicStyle = stylePreset === 'photo-realistic';
 
     const diagramPrompt = isCinematicStyle
@@ -883,26 +1025,24 @@ layout: title as "Main Topic: One-line descriptive subtitle".
 
 Article: "${articleTitle}"  |  Narration: "${scene.narration}"
 Output ONLY valid JSON:`
-      : `You are an expert visual art director. Output valid JSON describing a labeled explanatory infographic in ${stylePreset} style.
+      : `You are an expert visual art director. Output valid JSON describing a labeled explanatory infographic diagram in ${stylePreset} style.
 
-Visual style: ${styleGuide}
+Visual Aesthetic: ${styleGuide}
+Automatically Selected Diagram Format: ${activeDiagramGuide.label}
+Structural Metaphor: ${activeDiagramGuide.metaphor}
+Layout Guidance: ${activeDiagramGuide.layout}
+Diagram Details: ${activeDiagramGuide.details}
 
 {
-  "imagePrompt": "one descriptive paragraph (80-150 words) describing what the VIEWER SEES",
+  "imagePrompt": "one descriptive paragraph (80-150 words) describing what the VIEWER SEES. It MUST integrate the structural layout of '${activeDiagramGuide.label}' rendered in the aesthetic of '${stylePreset}'.",
   "layout": { "title": "Main Title: Descriptive subtitle explaining what the scene shows", "labels": ["key term 1", "key term 2"], "connectors": [{"from":"hub","to":"label 1"}] }
-
-VISUAL METAPHOR SELECTION (MANDATORY): Choose the single structural metaphor that best fits this scene and lead the imagePrompt with it explicitly:
-- "an isometric workflow pipeline diagram" (for processes, steps, stages, flows)
-- "a clean flat-design architecture map" (for systems, stacks, components, infrastructure)
-- "a split-screen comparative matrix" (for comparisons, trade-offs, contrasts)
-- "a minimalist decision tree flowchart" (for decisions, criteria, branches, thresholds)
-Then describe the layout direction (left-to-right flow, central hub branching outward, side-by-side columns, or top-down branching).
+}
 
 DATA HIERARCHY (MANDATORY): State the primary focal point, the secondary supporting details, and the tertiary concise labels.
 
 TEXT DENSITY (MANDATORY): Describe the diagram as using concise labels (maximum 3 words each), key data points, and universally recognized icons — NEVER paragraphs of prose, and no scrambled or illegible text.
 
-imagePrompt rules: ${stylePreset} style, flowing paragraph, embed labels naturally as "titled 'X'", "labeled 'Y'", use spatial words, describe connectors and layout within the image itself.
+imagePrompt rules: Render in '${stylePreset}' visual style with the structural layout of '${activeDiagramGuide.label}', flowing paragraph, embed labels naturally as "titled 'X'", "labeled 'Y'", use spatial words, describe connectors and layout within the image itself.
 layout: title as "Main Topic: One-line descriptive subtitle", labels 2-4 short terms, connectors simple hub-to-label.
 
 Article: "${articleTitle}"  |  Narration: "${scene.narration}"

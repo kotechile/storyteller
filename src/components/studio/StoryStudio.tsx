@@ -43,7 +43,14 @@ import {
   Plus,
   Trash2,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Cpu,
+  ListOrdered,
+  PenTool,
+  Boxes,
+  Clock,
+  BarChart3,
+  Sparkles
 } from 'lucide-react';
 
 const triggerConfetti = () => {
@@ -93,6 +100,135 @@ interface DirectorState {
   camera: CameraInstruction;
   lighting: LightingPreset;
 }
+
+export type StyleCategory =
+  | 'The Analytic Styles (For Data & Tech)'
+  | 'The Creative & Organic Styles (For Process & Strategy)'
+  | 'The Vintage & Textured Styles (For History & Guides)'
+  | 'Cinematic & Photographic';
+
+export interface StylePresetOption {
+  id: ImageStylePreset;
+  name: string;
+  category: StyleCategory;
+  description: string;
+  badge?: string;
+  iconName: 'Cpu' | 'ListOrdered' | 'PenTool' | 'Boxes' | 'Clock' | 'BarChart3' | 'Sparkles' | 'Camera' | 'Palette' | 'FileText';
+}
+
+export const STYLE_CATEGORIES: StyleCategory[] = [
+  'The Analytic Styles (For Data & Tech)',
+  'The Creative & Organic Styles (For Process & Strategy)',
+  'The Vintage & Textured Styles (For History & Guides)',
+  'Cinematic & Photographic',
+];
+
+export const STYLE_PRESETS: StylePresetOption[] = [
+  // 1. The Analytic Styles (For Data & Tech)
+  {
+    id: 'technical-blueprint',
+    name: 'Technical Blueprint',
+    category: 'The Analytic Styles (For Data & Tech)',
+    description: 'Monochromatic grids with fine lines, cross-sections, and precise geometric callouts.',
+    badge: 'Blueprint',
+    iconName: 'Cpu',
+  },
+  {
+    id: 'modern-minimal',
+    name: 'Modern Minimal',
+    category: 'The Analytic Styles (For Data & Tech)',
+    description: 'High-contrast layouts using a 3-color palette, solid block backgrounds, and bold typography.',
+    badge: 'Minimal',
+    iconName: 'Boxes',
+  },
+  {
+    id: 'corporate-dashboard',
+    name: 'Corporate Dashboard',
+    category: 'The Analytic Styles (For Data & Tech)',
+    description: 'Clean, professional grids featuring corporate colors (blues, teals, grays) with flat iconography.',
+    badge: 'Executive',
+    iconName: 'BarChart3',
+  },
+
+  // 2. The Creative & Organic Styles (For Process & Strategy)
+  {
+    id: 'whiteboard-sketch',
+    name: 'Whiteboard Sketch',
+    category: 'The Creative & Organic Styles (For Process & Strategy)',
+    description: 'Hand-drawn shapes, scribbled arrows, and handwritten text resembling a live brainstorming session.',
+    badge: 'Brainstorm',
+    iconName: 'PenTool',
+  },
+  {
+    id: 'dotted-notebook',
+    name: 'Dotted Notebook',
+    category: 'The Creative & Organic Styles (For Process & Strategy)',
+    description: 'Organic, casual illustrations and flowcharts rendered on grid or dot-matrix paper.',
+    badge: 'Notebook',
+    iconName: 'FileText',
+  },
+  {
+    id: 'pop-art-vector',
+    name: 'Pop Art / Vector',
+    category: 'The Creative & Organic Styles (For Process & Strategy)',
+    description: 'Vibrant, saturated colors with heavy outlines, flat shading, and playful, stylized character graphics.',
+    badge: 'Pop Art',
+    iconName: 'Sparkles',
+  },
+
+  // 3. The Vintage & Textured Styles (For History & Guides)
+  {
+    id: 'retro-technical',
+    name: 'Retro Technical',
+    category: 'The Vintage & Textured Styles (For History & Guides)',
+    description: 'Muted tones (cream, sepia, navy) with vintage textures, looking like an old user manual or field guide.',
+    badge: 'Vintage',
+    iconName: 'Clock',
+  },
+  {
+    id: 'chalkboard',
+    name: 'Chalkboard',
+    category: 'The Vintage & Textured Styles (For History & Guides)',
+    description: 'High-contrast white or colored chalk aesthetics layered over a dark, textured slate background.',
+    badge: 'Chalk',
+    iconName: 'Palette',
+  },
+
+  // 4. Cinematic & Photographic
+  {
+    id: 'photo-realistic',
+    name: 'Cinematic 35mm Photography',
+    category: 'Cinematic & Photographic',
+    description: 'Filmic 35mm photography with natural lighting, shallow depth of field, and authentic human context.',
+    badge: 'Cinematic',
+    iconName: 'Camera',
+  },
+];
+
+const renderStylePresetIcon = (iconName: string, className = 'w-4 h-4') => {
+  switch (iconName) {
+    case 'Cpu':
+      return <Cpu className={className} />;
+    case 'ListOrdered':
+      return <ListOrdered className={className} />;
+    case 'PenTool':
+      return <PenTool className={className} />;
+    case 'Boxes':
+      return <Boxes className={className} />;
+    case 'Clock':
+      return <Clock className={className} />;
+    case 'BarChart3':
+      return <BarChart3 className={className} />;
+    case 'Sparkles':
+      return <Sparkles className={className} />;
+    case 'Camera':
+      return <Camera className={className} />;
+    case 'Palette':
+      return <Palette className={className} />;
+    default:
+      return <Palette className={className} />;
+  }
+};
 
 const formatTimecode = (seconds: number): string => {
   const mins = Math.floor(seconds / 60);
@@ -1378,86 +1514,134 @@ export const StoryStudio: React.FC = () => {
                 </div>
               )}
 
-              {/* Creative Customizations (unlocked when URL or PDF is provided) */}
-              {hasValidInput && (
-                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-5 flex flex-col gap-4 animate-in fade-in duration-300">
-                  <div className="border-b border-slate-800 pb-2.5">
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      Creative Customizations
-                    </h3>
+              {/* Creative Customizations (Visual Style Presets, Music, Narrator) */}
+              <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-5 flex flex-col gap-5 animate-in fade-in duration-300">
+                <div className="border-b border-slate-800 pb-2.5 flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <Palette className="w-3.5 h-3.5 text-indigo-400" />
+                    Style Presets & Customizations
+                  </h3>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {STYLE_PRESETS.length} presets
+                  </span>
+                </div>
+
+                {/* Visual Style Preset Selector & Cards Grid */}
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                      Visual Aesthetic Style:
+                    </label>
+                    <select
+                      value={selectedStyle === 'whiteboard' ? 'whiteboard-sketch' : selectedStyle}
+                      onChange={(e) => setSelectedStyle(e.target.value as ImageStylePreset)}
+                      className="h-8 px-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-medium text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer w-full sm:w-[260px]"
+                    >
+                      {STYLE_CATEGORIES.map((category) => (
+                        <optgroup key={category} label={category} className="bg-slate-900 text-indigo-300 font-semibold">
+                          {STYLE_PRESETS.filter((p) => p.category === category).map((p) => (
+                            <option key={p.id} value={p.id} className="bg-slate-950 text-slate-200 font-normal">
+                              {p.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Visual Style Preset */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
-                        <Palette className="w-3.5 h-3.5 text-indigo-400" /> Style Preset
-                      </label>
-                      <select
-                        value={selectedStyle}
-                        onChange={(e) => setSelectedStyle(e.target.value as ImageStylePreset)}
-                        className="w-full h-10 px-3 bg-slate-950 border border-slate-800 rounded-xl text-xs font-medium text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-                      >
-                        <option value="photo-realistic">Photo Realistic (35mm)</option>
-                        <option value="whiteboard">Whiteboard Diagrams</option>
-                        <option value="illustration">Vector Illustration</option>
-                        <option value="chalkboard">Chalkboard (Classic Dark)</option>
-                        <option value="chalk-drawing">Academic Chalk Drawing</option>
-                      </select>
+                  {/* Auto-Diagram Intelligence Explainer Callout */}
+                  <div className="px-3 py-2 bg-gradient-to-r from-indigo-950/40 via-blue-950/30 to-purple-950/20 border border-indigo-500/20 rounded-xl flex items-start gap-2 text-[11px] text-slate-300">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-indigo-200">Dynamic Diagram Engine: </span>
+                      <span className="text-slate-300">
+                        Choose your visual aesthetic above. The AI will automatically select the ideal diagram format (Timelines, Workflows, Flowcharts, Modular Hubs, Data Viz, Schematics) per scene based on the narration.
+                      </span>
                     </div>
+                  </div>
 
-                    {/* Background Music */}
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex justify-between items-center">
-                        <label className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
-                          <Music className="w-3.5 h-3.5 text-indigo-400" /> Music Track
-                        </label>
-                        <label className="text-[11px] font-semibold text-indigo-400 hover:underline cursor-pointer">
-                          + Upload
-                          <input type="file" accept="audio/*" onChange={handleFileUploadMusic} className="hidden" />
-                        </label>
+                  {/* Active Preset Highlight Banner */}
+                  {(() => {
+                    const activePreset =
+                      STYLE_PRESETS.find(
+                        (p) => p.id === selectedStyle || (p.id === 'whiteboard-sketch' && selectedStyle === 'whiteboard')
+                      ) || STYLE_PRESETS[0];
+                    return (
+                      <div className="p-3 bg-indigo-950/20 border border-indigo-900/40 rounded-xl flex items-start gap-2.5 text-xs text-slate-300">
+                        <span className="mt-0.5 text-indigo-400 shrink-0">
+                          {renderStylePresetIcon(activePreset.iconName, 'w-4 h-4')}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-indigo-200">{activePreset.name}</span>
+                            {activePreset.badge && (
+                              <span className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-indigo-950/80 border border-indigo-800/80 text-indigo-300">
+                                {activePreset.badge}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-slate-400 text-[11px] mt-0.5">{activePreset.description}</p>
+                          <span className="text-indigo-400/80 block text-[10px] mt-1 font-medium">
+                            ✨ Auto-diagrams active: Each scene layout will adapt dynamically based on narration.
+                          </span>
+                        </div>
                       </div>
-                      <select
-                        value={selectedMusicId}
-                        onChange={(e) => setSelectedMusicId(e.target.value)}
-                        className="w-full h-10 px-3 bg-slate-950 border border-slate-800 rounded-xl text-xs font-medium text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-                      >
-                        <option value="">No Music</option>
-                        {musicTracks.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name} ({t.genre})
-                          </option>
-                        ))}
-                      </select>
+                    );
+                  })()}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-slate-800/80">
+                  {/* Background Music */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
+                        <Music className="w-3.5 h-3.5 text-indigo-400" /> Music Track
+                      </label>
+                      <label className="text-[11px] font-semibold text-indigo-400 hover:underline cursor-pointer">
+                        + Upload
+                        <input type="file" accept="audio/*" onChange={handleFileUploadMusic} className="hidden" />
+                      </label>
                     </div>
+                    <select
+                      value={selectedMusicId}
+                      onChange={(e) => setSelectedMusicId(e.target.value)}
+                      className="w-full h-10 px-3 bg-slate-950 border border-slate-800 rounded-xl text-xs font-medium text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                    >
+                      <option value="">No Music</option>
+                      {musicTracks.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({t.genre})
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Voice Selection */}
-                  <div className="flex flex-col gap-1.5 pt-1">
+                  <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
                       <Mic className="w-3.5 h-3.5 text-indigo-400" /> Narrator Voice
                     </label>
-                    <div className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-xl">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-md shadow-indigo-600/30">
+                    <div className="flex items-center justify-between p-2.5 bg-slate-950 border border-slate-800 rounded-xl h-10">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-6 h-6 rounded-full bg-indigo-600 text-white font-bold text-[11px] flex items-center justify-center shrink-0 shadow-md shadow-indigo-600/30">
                           {activeVoice.name.charAt(0)}
                         </div>
-                        <div>
-                          <div className="font-bold text-slate-100 text-xs">{activeVoice.name}</div>
-                          <div className="text-[11px] text-slate-400">{activeVoice.description}</div>
+                        <div className="truncate">
+                          <span className="font-bold text-slate-100 text-xs">{activeVoice.name}</span>
+                          <span className="text-[11px] text-slate-400 ml-1.5 hidden md:inline">({activeVoice.description})</span>
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => setIsVoiceModalOpen(true)}
-                        className="px-3 py-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-200 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                        className="px-2.5 py-1 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-200 text-xs font-semibold rounded-lg transition-colors cursor-pointer shrink-0"
                       >
                         Change
                       </button>
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Option Checkbox */}
               <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -1675,6 +1859,29 @@ export const StoryStudio: React.FC = () => {
                           <span className="truncate">{activeVoice.name.split(' ')[0]}</span>
                           <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
                         </button>
+                      </div>
+
+                      {/* Visual Style Preset */}
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-xs font-medium text-slate-400 flex items-center gap-1 shrink-0">
+                          <Palette className="w-3.5 h-3.5 text-indigo-400" /> Style:
+                        </label>
+                        <select
+                          value={selectedStyle === 'whiteboard' ? 'whiteboard-sketch' : selectedStyle}
+                          onChange={(e) => setSelectedStyle(e.target.value as ImageStylePreset)}
+                          title="Select visual style preset for image generation"
+                          className="h-8 w-[170px] bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg px-2.5 outline-none focus:ring-1 focus:ring-indigo-500 font-medium cursor-pointer"
+                        >
+                          {STYLE_CATEGORIES.map((category) => (
+                            <optgroup key={category} label={category} className="bg-slate-900 text-indigo-300 font-semibold">
+                              {STYLE_PRESETS.filter((p) => p.category === category).map((p) => (
+                                <option key={p.id} value={p.id} className="bg-slate-950 text-slate-200 font-normal">
+                                  {p.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
                       </div>
                     </div>
 

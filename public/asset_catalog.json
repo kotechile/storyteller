@@ -1,1 +1,9 @@
-{}
+{
+  "embeddings_and_the_augmented_prompt_photo-realistic": {
+    "conceptKey": "embeddings_and_the_augmented_prompt_photo-realistic",
+    "imageUrl": "generated_assets/embeddings_and_the_augmented_prompt_photo-realistic_1791738469317.png",
+    "provider": "kie",
+    "prompt": "A minimal line illustration: a few document cards dissolve into points in a vector space, and the nearest points lift into a prompt box beside a user query.",
+    "generatedAt": "2026-10-11T17:07:50.195Z"
+  }
+}
