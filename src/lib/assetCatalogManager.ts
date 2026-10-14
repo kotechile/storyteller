@@ -113,6 +113,25 @@ async function downloadAndSaveImage(imageUrl: string, conceptKey: string): Promi
 }
 
 /**
+ * A reference Remotion/Vite can actually load.
+ *
+ * The catalog stores what `downloadAndSaveImage` returns — a public-relative path
+ * (`generated_assets/<file>.png`). Treating only `http`/`data:` as valid here silently discarded
+ * every generated image: the element kept its `asset_1` placeholder, so renders showed a missing
+ * image while the file sat on disk having already been paid for.
+ */
+export function isUsableImageRef(value: string | undefined | null): boolean {
+  if (!value) return false;
+  const v = String(value);
+  return v.startsWith('http') || v.startsWith('data:image') || v.startsWith('/') || v.startsWith('generated_assets/');
+}
+
+/** Root-relative path so both the Vite dev server and Remotion's bundle server serve it from public/. */
+export function normalizeImageRef(value: string): string {
+  return value.startsWith('generated_assets/') ? `/${value}` : value;
+}
+
+/**
  * Main Lookup & Generation Pipeline:
  * 1. Checks public/asset_catalog.json. If existing high-quality image exists, reuses it immediately (0 API calls).
  * 2. If missing, resolves Supabase / env keys and generates with Flux / DALL-E using parameterized stylePreset.
@@ -123,7 +142,7 @@ export async function getOrGenerateConceptImage(
   prompt: string,
   stylePreset: ImageStylePreset = 'photo-realistic',
   bypassCache = false
-): Promise<{ imageUrl: string; fromCache: boolean; provider: string }> {
+): Promise<{ imageUrl: string; fromCache: boolean; provider: string; remoteUrl?: string }> {
   const rawKey = conceptName
     .toLowerCase()
     .replace(/^asset:/, '')
@@ -142,6 +161,7 @@ export async function getOrGenerateConceptImage(
       imageUrl: existing.imageUrl,
       fromCache: true,
       provider: existing.provider,
+      remoteUrl: /^https?:/i.test(existing.imageUrl) ? existing.imageUrl : undefined,
     };
   }
 
@@ -161,6 +181,11 @@ export async function getOrGenerateConceptImage(
     width: 1920,
     height: 1080,
   });
+
+  // kie.ai can only fetch a public http(s) url, so remember the provider's own url before it is
+  // downloaded to disk: image_to_video needs it as `first_frame_url`, and it expires while the
+  // local copy does not.
+  const remoteUrl = /^https?:/i.test(genResult.imageUrl) ? genResult.imageUrl : undefined;
 
   // 3. Save generated image & automatically update JSON catalog
   let savedLocalPath = genResult.imageUrl;
@@ -182,6 +207,7 @@ export async function getOrGenerateConceptImage(
     imageUrl: savedLocalPath,
     fromCache: false,
     provider: genResult.provider,
+    remoteUrl,
   };
 }
 
@@ -252,7 +278,7 @@ export async function resolveManifestImageAssets(
       // Clear any prompt text the LLM left in sourceAssetId — it's not a URL and
       // Remotion would otherwise try to load it as an image (EncodingError).
       for (const el of (scene.layout?.elements || [])) {
-        if ((el as any).type === 'image' && (el as any).sourceAssetId && !(el as any).sourceAssetId.startsWith('http')) {
+        if ((el as any).type === 'image' && (el as any).sourceAssetId && !isUsableImageRef((el as any).sourceAssetId)) {
           (el as any).sourceAssetId = '';
         }
       }
@@ -316,10 +342,13 @@ export async function resolveManifestImageAssets(
             bypassCache
           );
           imageUrl = resolved.imageUrl;
+          // Keep the provider-hosted url on the element: image_to_video must hand kie.ai an http
+          // url (a local /generated_assets path is unreachable from their servers).
+          if (resolved.remoteUrl) (element as any).sourceRemoteUrl = resolved.remoteUrl;
         }
 
-        if (imageUrl && (imageUrl.startsWith('http') || imageUrl.startsWith('data:'))) {
-          element.sourceAssetId = imageUrl;
+        if (imageUrl && isUsableImageRef(imageUrl)) {
+          element.sourceAssetId = normalizeImageRef(imageUrl);
           if ((scene.sceneNumber === 1 || !scene1ReferenceImage)) {
             scene1ReferenceImage = imageUrl;
             console.log(`[AssetCatalogManager] 📌 Locked Scene 1 reference image signature for character consistency.`);
@@ -371,15 +400,16 @@ export async function resolveManifestVideoAssets(
     );
 
     for (const element of imageElements) {
-      const imageUrl = element.sourceAssetId;
-      if (!imageUrl) {
-        console.warn(`[AssetCatalogManager] No source image for element "${element.id}", skipping video gen.`);
-        continue;
-      }
+      const localRef = element.sourceAssetId;
+      // kie.ai fetches the frame itself: it needs the provider-hosted url, not our local copy.
+      const imageUrl = (element as any).sourceRemoteUrl || localRef;
 
-      // Skip base64 data URLs — kie.ai requires hosted URLs
-      if (imageUrl.startsWith('data:')) {
-        console.warn(`[AssetCatalogManager] Element "${element.id}" has base64 image, skipping image-to-video (needs hosted URL).`);
+      if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
+        console.warn(
+          `[AssetCatalogManager] Element "${element.id}" (scene ${scene.sceneNumber}): no publicly fetchable image ` +
+            `(got "${String(imageUrl || localRef).slice(0, 60)}"). Skipping image-to-video — kie.ai cannot fetch a local path or base64. ` +
+            `The scene stays static; re-run so the image is generated with its provider URL preserved.`,
+        );
         continue;
       }
 

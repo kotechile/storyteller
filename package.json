@@ -59,7 +59,12 @@
     "render:kinetic": "remotion render kinetic-text out/kinetic-text.mp4 --codec=h264 --crf=18",
     "render:transparent": "remotion render transparent-overlay out/transparent-overlay.mov --codec=prores --prores-profile=4444 --pixel-format=yuva444p10le --image-format=png",
     "render:cta": "remotion render call-to-action out/call-to-action.mp4 --codec=h264 --crf=18",
-    "render:sequence": "remotion render transparent-overlay out/sequence/frame-%04d.png --image-format=png"
+    "render:sequence": "remotion render transparent-overlay out/sequence/frame-%04d.png --image-format=png",
+    "storyteller": "tsx src/storyteller.ts",
+    "storyteller:mcp": "tsx mcp/storyteller.mts",
+    "seed:storyteller": "tsx scripts/seed-storyteller-image-models.ts",
+    "probe:images": "tsx scripts/probe-image-models.mts",
+    "mcp:test:storyteller": "tsx scripts/test-storyteller-mcp.ts"
   },
   "sideEffects": [
     "*.css"

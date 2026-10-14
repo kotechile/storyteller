@@ -5,5 +5,26 @@
     "provider": "kie",
     "prompt": "A minimal line illustration: a few document cards dissolve into points in a vector space, and the nearest points lift into a prompt box beside a user query.",
     "generatedAt": "2026-10-11T17:07:50.195Z"
+  },
+  "ai_hallucination_vs_verified_data_infographic": {
+    "conceptKey": "ai_hallucination_vs_verified_data_infographic",
+    "imageUrl": "generated_assets/ai_hallucination_vs_verified_data_infographic_1792013211504.png",
+    "provider": "kie",
+    "prompt": "A hand-drawn comparative matrix infographic rendered on a glossy dry-erase whiteboard using black, navy, and green marker ink with scribbled arrows and handwritten text. A vertical dividing line separates the board into two contrasting columns. The left column is labeled 'Standard LLM' and features a red cross mark, a faded notebook icon titled 'Static Data', and a scribbled arrow pointing to text labeled 'Hallucinations'. The right column is labeled 'Retrieval-Augmented Generation' and features a green checkmark, a glowing database icon titled 'Live Sources', and an arrow pointing to text labeled 'Verified Citations'. At the top, bold handwritten lettering titles the diagram 'AI Accuracy: Static vs RAG Trade-offs'.",
+    "generatedAt": "2026-10-14T21:26:52.365Z"
+  },
+  "stepbystep_retrieval_pipeline_infographic": {
+    "conceptKey": "stepbystep_retrieval_pipeline_infographic",
+    "imageUrl": "generated_assets/stepbystep_retrieval_pipeline_infographic_1792013260922.png",
+    "provider": "kie",
+    "prompt": "An infographic-style isometric workflow diagram rendered on a glossy dry-erase whiteboard with hand-drawn black, navy, and green marker ink. The primary focal point is a three-stage process workflow titled 'Retrieval-Augmented Generation', featuring ordered stage panels with prominent step badges. Step 1 is labeled 'User Prompt' with a handwritten arrow pointing to Step 2, titled 'External Database', which extracts relevant files. A curving green marker arrow leads to Step 3, labeled 'Injected Context', showing documents merging into the final AI output. Secondary supporting details include scribbled arrows and action breakdowns showing data moving through the pipeline. Tertiary concise labels mark key nodes like 'Query', 'Retrieve', and 'Generate', maintaining high legibility and clear sequential progress.",
+    "generatedAt": "2026-10-14T21:27:41.538Z"
+  },
+  "vector_space__context_analysis_infographic": {
+    "conceptKey": "vector_space__context_analysis_infographic",
+    "imageUrl": "generated_assets/vector_space__context_analysis_infographic_1792013310093.png",
+    "provider": "kie",
+    "prompt": "A hand-drawn infographic on a glossy dry-erase whiteboard rendered in black, navy, and green marker ink, featuring a modular systems and central hub architecture. At the center, a prominent core hub labeled 'RAG System Core' is surrounded by connected peripheral subsystem containers. Radiating outward via structured bus lines are modular blocks: one titled 'Document Embeddings' showing numerical coordinate maps, another labeled 'Semantic Retriever' with a vector lookup icon, and a warning-flagged container titled 'Context Pitfalls' depicting RAG poisoning and misinterpretation risks. Scribbled arrows and handwritten notes connect the central hub to each subsystem, maintaining a clean yet brainstorming-style layout with crisp typography.",
+    "generatedAt": "2026-10-14T21:28:31.293Z"
   }
 }
