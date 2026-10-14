@@ -130,13 +130,17 @@ export async function renderExplainer(
 
   fs.mkdirSync(path.dirname(opts.videoPath), { recursive: true });
   fs.writeFileSync(propsPath, JSON.stringify(payload, null, 2));
-  // Remove a stale output so verification cannot pass on an old file.
-  try { fs.unlinkSync(opts.videoPath); } catch { /* nothing to remove */ }
+
+  // Render to a TEMPORARY name and only move it into place after it verifies. Deleting the target
+  // first (the original behaviour) means an interrupted or failing render destroys a good previous
+  // video — measured: a verified 50 MB, 6-minute render was lost to a killed re-render.
+  const tempOutput = opts.videoPath.replace(/\.mp4$/, '.rendering.mp4');
+  try { fs.unlinkSync(tempOutput); } catch { /* nothing to remove */ }
 
   const localBin = path.join(projectRoot, 'node_modules', '.bin', 'remotion');
   const cmd = fs.existsSync(localBin) ? localBin : 'npx';
   const args = [
-    'render', 'src/index.ts', 'StorytellerExplainer', opts.videoPath,
+    'render', 'src/index.ts', 'StorytellerExplainer', tempOutput,
     `--props=${propsPath}`, '--codec=h264', '--concurrency=1',
   ];
 
@@ -162,9 +166,11 @@ export async function renderExplainer(
     });
   });
 
-  if (!fs.existsSync(opts.videoPath) || fs.statSync(opts.videoPath).size === 0) {
-    throw new Error(`[renderPayload] render exited 0 but produced no file at ${opts.videoPath}`);
+  if (!fs.existsSync(tempOutput) || fs.statSync(tempOutput).size === 0) {
+    throw new Error(`[renderPayload] render exited 0 but produced no file at ${tempOutput}`);
   }
+  // Verified — now it is safe to displace any previous render for this run.
+  fs.renameSync(tempOutput, opts.videoPath);
 
   return {
     videoPath: opts.videoPath,

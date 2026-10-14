@@ -21,7 +21,7 @@ import { randomUUID } from 'node:crypto';
 
 import { ingestUrl, ingestPdf } from './lib/ingest';
 import { generateContextAwareStoryboard, generateVideosForManifest } from './lib/contextEngine';
-import { isUsableImageRef, resolveManifestImageAssets } from './lib/assetCatalogManager';
+import { getOrGenerateConceptImage, isUsableImageRef, normalizeImageRef, resolveManifestImageAssets } from './lib/assetCatalogManager';
 import { synthesizePerSceneSpeech } from './lib/elevenlabsTts';
 import { isGroundingDinoAvailable } from './lib/groundingDinoClient';
 import { generateRegionFocusEvents } from './lib/regionSync';
@@ -31,6 +31,7 @@ import {
   assertRenderablePayload,
   buildRenderPayload,
   renderExplainer,
+  expectedFrameCount,
   sceneDurations,
   sceneMidpoints,
   type RenderPayload,
@@ -44,6 +45,7 @@ import {
   measureMeanVolumeDb,
   pickPosterFrame,
   probeDurationSeconds,
+  readJson,
   readRunRecord,
   writeJson,
 } from './lib/runKit';
@@ -86,6 +88,13 @@ export interface StorytellerRequest {
   runId?: string;
   /** Stop AFTER this stage and return a partial run — lets plumbing be verified without paying for later stages. */
   until?: StorytellerStatus;
+  /**
+   * Reuse the artifacts already written to runs/<runId>/ (article, storyboard, images, video,
+   * narration) and redo only localization + render + poster. A long run WILL get interrupted
+   * (a 6-minute video renders for tens of minutes); re-paying for images and a Seedance queue
+   * because a render was killed is not acceptable.
+   */
+  resume?: boolean;
 }
 
 export interface StorytellerRun {
@@ -142,6 +151,32 @@ function applyOverrides(cfg: StorytellerConfig, req: StorytellerRequest): Storyt
   };
 }
 
+/**
+ * Manifest to resume from: strategies/layout come from the PRE-video artifact, video assets are
+ * grafted on from the POST-video one. The post-video artifact is a mutated copy — the cost cap may
+ * have rewritten scene strategies in it — so resuming from it directly can resurrect a scene the cap
+ * made unrenderable.
+ */
+function loadResumeManifest(runDir: string): StoryboardManifest | null {
+  const images =
+    readJson<StoryboardManifest>(path.join(runDir, 'storyboard.images.json')) ??
+    readJson<StoryboardManifest>(path.join(runDir, 'storyboard.json'));
+  const video = readJson<StoryboardManifest>(path.join(runDir, 'storyboard.video.json'));
+  if (!images && !video) return null;
+  if (!images || !video) return (images ?? video)!;
+
+  for (const scene of images.scenes) {
+    const v = video.scenes.find((s) => s.sceneNumber === scene.sceneNumber) as any;
+    if (!v) continue;
+    for (const el of ((scene.layout?.elements || []) as any[])) {
+      const ve = ((v.layout?.elements || []) as any[]).find((e) => e.id === el.id);
+      if (ve?.videoUrl) el.videoUrl = ve.videoUrl;
+      if (ve?.sourceAssetId && !el.sourceAssetId) el.sourceAssetId = ve.sourceAssetId;
+    }
+  }
+  return images;
+}
+
 /** Image elements that still have no usable reference (skips text_to_video scenes by design). */
 function collectImageProblems(manifest: StoryboardManifest): string[] {
   const problems: string[] = [];
@@ -161,28 +196,100 @@ function countUnresolvedImages(manifest: StoryboardManifest): number {
   return collectImageProblems(manifest).filter((p) => p.includes('no usable image')).length;
 }
 
+function hasImageElement(scene: any): boolean {
+  return (scene.layout?.elements || []).some((e: any) => e.type === 'image' && isUsableImageRef(e.sourceAssetId));
+}
+
+function hasVideoElement(scene: any): boolean {
+  return (scene.layout?.elements || []).some((e: any) => Boolean(e.videoUrl));
+}
+
 /**
- * Demotes animated scenes beyond the cost cap. Deterministic (scene order) and recorded — a silently
- * dropped animation would look like a generation failure later.
+ * Enforces the Seedance cost cap — but ONLY by demoting `image_to_video` scenes.
+ *
+ * Measured trap: demoting a `text_to_video` scene to `static` leaves the scene with NO visual at all,
+ * because those scenes deliberately carry no image element (the video *is* the visual). The result is
+ * an unrenderable scene that fails the image gate. So a `text_to_video` scene is left animated and the
+ * cap is reported as best-effort — the alternative silently drops a scene's visual.
  */
 function capAnimatedScenes(manifest: StoryboardManifest, maxScenes: number, note: (m: string) => void): StoryboardManifest {
   if (maxScenes <= 0) return manifest;
-  const animated = manifest.scenes.filter((s) => {
-    const a = (s as any).animationStrategy;
-    return a === 'image_to_video' || a === 'text_to_video';
-  });
-  if (animated.length <= maxScenes) return manifest;
 
-  const keep = new Set(animated.slice(0, maxScenes).map((s) => s.sceneNumber));
+  const i2v = manifest.scenes.filter((s) => (s as any).animationStrategy === 'image_to_video');
+  const t2v = manifest.scenes.filter((s) => (s as any).animationStrategy === 'text_to_video');
+  if (i2v.length + t2v.length <= maxScenes) return manifest;
+
+  // text_to_video scenes are not demotable, so they claim the budget first (in scene order).
+  const budget = Math.max(0, maxScenes - t2v.length);
+  const keep = new Set(i2v.slice(0, budget).map((s) => s.sceneNumber));
   const demoted: number[] = [];
-  for (const scene of manifest.scenes) {
-    const a = (scene as any).animationStrategy;
-    if ((a === 'image_to_video' || a === 'text_to_video') && !keep.has(scene.sceneNumber)) {
-      (scene as any).animationStrategy = 'static';
+  for (const scene of i2v) {
+    if (!keep.has(scene.sceneNumber)) {
+      (scene as any).animationStrategy = 'static'; // keeps its still image — always renderable
       demoted.push(scene.sceneNumber);
     }
   }
-  note(`video cap ${maxScenes}: demoted scene(s) ${demoted.join(', ')} from animated to static to stay inside the budget`);
+  if (demoted.length) note(`video cap ${maxScenes}: demoted image_to_video scene(s) ${demoted.join(', ')} to static (they keep their still image)`);
+  if (t2v.length > maxScenes) {
+    note(`video cap ${maxScenes}: ${t2v.length} text_to_video scene(s) cannot be demoted without generating images they don't have — cap exceeded, kept animated`);
+  }
+  return manifest;
+}
+
+/**
+ * Gives every scene a visual before rendering. A scene with neither an image nor a video renders as a
+ * blank frame — the failure this whole pipeline is built to avoid. Two cases:
+ *  - a demoted/static scene with no still → generate one (cheap: nano-banana-pro, not Seedance);
+ *  - a `text_to_video` scene with no video and no plan to generate one (e.g. resumed run) → demote to
+ *    static and generate a still, recorded as a correction.
+ */
+async function fillMissingVisuals(
+  manifest: StoryboardManifest,
+  style: ImageStylePreset,
+  opts: { willAnimateVideos: boolean },
+  note: (m: string) => void,
+  corrections: string[],
+): Promise<StoryboardManifest> {
+  for (const scene of manifest.scenes) {
+    if (hasImageElement(scene) || hasVideoElement(scene)) continue;
+
+    const strategy = (scene as any).animationStrategy;
+    if (strategy === 'text_to_video' && opts.willAnimateVideos) continue; // the video will fill this
+
+    const imageEl = ((scene.layout?.elements || []) as any[]).find((e) => e.type === 'image');
+    const el =
+      imageEl ||
+      ({
+        id: `static_fill_${scene.sceneNumber}`,
+        type: 'image',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        zIndex: 1,
+        imageDescription: scene.narration || 'Explanatory diagram',
+      } as any);
+    if (!imageEl) {
+      scene.layout = scene.layout || ({ background: { type: 'solid', value: '#ffffff' }, elements: [] } as any);
+      (scene.layout.elements as any[]).unshift(el);
+    }
+
+    const conceptName = el.id || `scene_${scene.sceneNumber}`;
+    note(`scene ${scene.sceneNumber}: no visual (strategy was "${strategy}") — generating a still so the scene is not blank`);
+    const result = await getOrGenerateConceptImage(
+      conceptName,
+      el.imageDescription || scene.narration || 'technical diagram infographic',
+      style,
+      false,
+    );
+    // normalizeImageRef: the catalog hands back 'generated_assets/x.png'; the renderer needs a
+    // root-relative (then asset-server-absolute) reference.
+    el.sourceAssetId = normalizeImageRef(result.imageUrl);
+    if (strategy === 'text_to_video') {
+      (scene as any).animationStrategy = 'static';
+      corrections.push(`scene ${scene.sceneNumber}: text_to_video → static (no video generated on this run; a still was generated instead)`);
+    }
+  }
   return manifest;
 }
 
@@ -237,11 +344,14 @@ export async function runStoryteller(
 
   const save = (): void => {
     run.updatedAt = new Date().toISOString();
+    if (run.status !== 'failed') run.error = undefined; // a new attempt must not inherit the previous failure
     writeJson(path.join(runDir, 'run.json'), run);
     onProgress?.(run);
   };
+  const NOTE_LOG_CAP = 400;
   const note = (msg: string): void => {
     run.log.push(`${new Date().toISOString()} ${msg}`);
+    if (run.log.length > NOTE_LOG_CAP) run.log.splice(0, run.log.length - NOTE_LOG_CAP);
     console.log(`[storyteller:${runId}] ${msg}`);
   };
   const warn = (msg: string): void => {
@@ -261,6 +371,20 @@ export async function runStoryteller(
     return true;
   };
 
+  // ── resume: reuse whatever the previous attempt already paid for ──────────────
+  const resumed = {
+    article: req.resume ? readJson<ArticleData>(path.join(runDir, 'article.json')) : null,
+    manifest: req.resume ? loadResumeManifest(runDir) : null,
+    sceneAudio: (req.resume ? readJson<SceneAudio[]>(path.join(runDir, 'scene_audio.json')) : null) ?? [],
+  };
+  if (req.resume) {
+    note(
+      resumed.manifest
+        ? `resume: reusing storyboard (${resumed.manifest.scenes.length} scenes)${resumed.sceneAudio.length ? ` + ${resumed.sceneAudio.length} narration track(s)` : ''} — paid stages will not run again`
+        : 'resume: no usable storyboard artifact found — running the full pipeline',
+    );
+  }
+
   let server: PublicServer | null = null;
 
   try {
@@ -270,9 +394,9 @@ export async function runStoryteller(
     // ── 1. ingest ──────────────────────────────────────────────────────────────
     setStatus('ingesting');
     const isPdf = url.toLowerCase().endsWith('.pdf');
-    const article: ArticleData = isPdf ? await ingestPdf(url) : await ingestUrl(url);
+    const article: ArticleData = resumed.article ?? (isPdf ? await ingestPdf(url) : await ingestUrl(url));
     run.title = article.title;
-    note(`ingested "${article.title}" (${article.wordCount} words, ${article.assets.length} article image asset(s))`);
+    note(`ingested "${article.title}" (${article.wordCount} words, ${article.assets.length} article image asset(s))${resumed.article ? ' [reused]' : ''}`);
     writeJson(path.join(runDir, 'article.json'), article);
     if (stopAfter('ingesting')) return run;
 
@@ -292,15 +416,19 @@ export async function runStoryteller(
     // clean retry is worth it. Any other error propagates untouched: no invented storyboard, no
     // cached substitute.
     let storyboardResult: Awaited<ReturnType<typeof generateContextAwareStoryboard>>;
-    try {
-      storyboardResult = await generateContextAwareStoryboard(article, storyboardOptions);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (!/Failed to parse LLM JSON|Unexpected token|JSON at position/i.test(message)) throw err;
-      warn(`planner returned malformed JSON — retrying the storyboard stage once (${message.split('\n')[0]})`);
-      setStatus('storyboarding');
-      storyboardResult = await generateContextAwareStoryboard(article, storyboardOptions);
-      note('storyboard retry succeeded');
+    if (resumed.manifest) {
+      storyboardResult = { manifest: resumed.manifest, context: undefined, usedFallback: false } as any;
+    } else {
+      try {
+        storyboardResult = await generateContextAwareStoryboard(article, storyboardOptions);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!/Failed to parse LLM JSON|Unexpected token|JSON at position/i.test(message)) throw err;
+        warn(`planner returned malformed JSON — retrying the storyboard stage once (${message.split('\n')[0]})`);
+        setStatus('storyboarding');
+        storyboardResult = await generateContextAwareStoryboard(article, storyboardOptions);
+        note('storyboard retry succeeded');
+      }
     }
     const { manifest: rawManifest, context } = storyboardResult;
     let manifest: StoryboardManifest = rawManifest;
@@ -314,8 +442,10 @@ export async function runStoryteller(
     // generateContextAwareStoryboard() ALREADY ran resolveManifestImageAssets and paid for these
     // images. Resolving again with bypassCache=true would regenerate every one of them, so only
     // resolve when something is genuinely unresolved.
-    const unresolvedBefore = countUnresolvedImages(manifest);
-    if (unresolvedBefore > 0) {
+    const unresolvedBefore = resumed.manifest ? 0 : countUnresolvedImages(manifest);
+    if (resumed.manifest) {
+      note('images: reused from the resumed storyboard artifact');
+    } else if (unresolvedBefore > 0) {
       note(`images: ${unresolvedBefore} element(s) unresolved after the storyboard stage — running the resolution pass`);
       manifest = await resolveManifestImageAssets(manifest, article.assets, cfg.style as unknown as ImageStylePreset, true);
     } else {
@@ -330,7 +460,10 @@ export async function runStoryteller(
     if (stopAfter('images')) return run;
 
     // ── 4. animated scenes (Seedance) ─────────────────────────────────────────
-    if (cfg.video.enabled) {
+    if (cfg.video.enabled && resumed.manifest) {
+      run.animatedScenes = manifest.scenes.filter((s) => Boolean((s.layout?.elements || []).find((e: any) => e.videoUrl))).length;
+      note(`video: reused from the resumed artifact (${run.animatedScenes} animated scene(s))`);
+    } else if (cfg.video.enabled) {
       setStatus('video');
       manifest = capAnimatedScenes(manifest, cfg.video.maxScenes, note);
       manifest = await generateVideosForManifest(
@@ -344,11 +477,18 @@ export async function runStoryteller(
     } else {
       note('video scenes disabled (STORYTELLER_VIDEO_SCENES=0)');
     }
+    // Last line of defence before rendering: no scene may be visual-less.
+    manifest = await fillMissingVisuals(manifest, cfg.style as unknown as ImageStylePreset, { willAnimateVideos: false }, note, run.corrections);
     if (stopAfter('video')) return run;
 
     // ── 5. narration ──────────────────────────────────────────────────────────
-    let sceneAudio: SceneAudio[] = [];
-    if (cfg.voice.enabled) {
+    let sceneAudio: SceneAudio[] = resumed.sceneAudio;
+    if (cfg.voice.enabled && sceneAudio.length > 0) {
+      note(`voice: reused ${sceneAudio.length} narration track(s) from the resumed artifact`);
+      // The artifact holds the pre-fit durations (it was written before narration), so re-apply the
+      // fit here to keep the manifest and the rendered props consistent.
+      manifest = fitScenesToAudio(manifest, sceneAudio, note, run.corrections);
+    } else if (cfg.voice.enabled) {
       setStatus('voice');
       sceneAudio = await synthesizePerSceneSpeech(
         manifest.scenes.map((s) => ({ sceneNumber: s.sceneNumber, narration: s.narration })),
@@ -410,6 +550,26 @@ export async function runStoryteller(
     manifest = localized.manifest;
     note(`localized ${localized.localized} image(s)`);
 
+    // kie.ai caps a generated clip at 15s. A scene whose narration runs longer therefore shows the
+    // clip's LAST FRAME for the remainder (measured: a 15s clip inside a 75s scene → ~60s of freeze,
+    // which reads as a still image). The provider cap cannot be papered over here, so it is recorded:
+    // either the narration is shortened or the clip is tiled in the renderer (OffthreadVideo has no
+    // `loop` prop), and both are deliberate choices, not silent behaviour.
+    const CLIP_CAP_SECONDS = 15;
+    for (const scene of manifest.scenes) {
+      const hasVideo = ((scene.layout?.elements || []) as any[]).some((e) => Boolean(e.videoUrl));
+      if (!hasVideo) continue;
+      const narration = sceneAudio.find((sa) => sa.sceneNumber === scene.sceneNumber)?.durationSeconds
+        ?? Number(scene.duration)
+        ?? 0;
+      if (narration > CLIP_CAP_SECONDS + 1) {
+        warn(
+          `scene ${scene.sceneNumber}: animated clip is capped at ${CLIP_CAP_SECONDS}s by the provider but the scene runs ${narration.toFixed(1)}s — ` +
+            `the clip's last frame holds for ~${(narration - CLIP_CAP_SECONDS).toFixed(0)}s`,
+        );
+      }
+    }
+
     const size = FORMATS[cfg.aspect];
 
     // ── 8. render ─────────────────────────────────────────────────────────────
@@ -439,12 +599,52 @@ export async function runStoryteller(
     assertRenderablePayload(payload, { voiceExpected: cfg.voice.enabled });
 
     const videoPath = path.join(runDir, 'final.mp4');
-    const result = await renderExplainer(payload, {
-      videoPath,
-      propsPath: path.join(runDir, 'storyboard_props.json'),
-      logPath: path.join(runDir, 'render.log'),
-      onProgress: (line) => { if (/rendering \d+\/\d+/.test(line)) note(line); },
-    });
+    const propsPath = path.join(runDir, 'storyboard_props.json');
+    let lastRenderHeartbeat = 0;
+
+    // An interrupted run is common here: a 6-minute video renders for minutes and the process can be
+    // killed. Re-rendering it to redo a poster would be wasteful, so reuse a render that is at least
+    // as new as the props it was made from — and say so, loudly.
+    let reusedRender = false;
+    if (req.resume && fs.existsSync(videoPath)) {
+      const videoMtime = fs.statSync(videoPath).mtimeMs;
+      const propsMtime = fs.existsSync(propsPath) ? fs.statSync(propsPath).mtimeMs : 0;
+      const expected = expectedFrameCount(payload) / (payload.fps || 30);
+      const actual = await probeDurationSeconds(videoPath);
+      // The composition adds a title card ON TOP of the narration, so a healthy render is a little
+      // LONGER than the summed scene audio (measured: 367.5s of narration → 373.95s). The original
+      // ±5s window rejected that real render and sent it down a destructive re-render path.
+      const shapeOk = actual !== null && actual >= expected - 1 && actual <= expected + 30;
+      if (videoMtime >= propsMtime && shapeOk) {
+        reusedRender = true;
+        note(`resume: reusing the existing render (${actual?.toFixed(2)}s) — poster + verification still run`);
+        warn(`reused a pre-existing render for this run; delete runs/${runId}/final.mp4 to force a re-render`);
+        run.videoPath = videoPath;
+        run.durationSeconds = actual ?? undefined;
+      } else {
+        note(`resume: existing render rejected (duration ${actual?.toFixed(2)}s vs expected ~${expected.toFixed(2)}s, mtime ${videoMtime >= propsMtime ? 'ok' : 'older than props'}) — re-rendering`);
+      }
+    }
+
+    const result = reusedRender
+      ? { videoPath, propsPath, logPath: path.join(runDir, 'render.log'), durationSeconds: run.durationSeconds ?? null }
+      : await renderExplainer(payload, {
+          videoPath,
+          propsPath,
+          logPath: path.join(runDir, 'render.log'),
+          onProgress: (line) => {
+            const m = /rendering (\d+)\/(\d+)/.exec(line);
+            if (!m) return;
+            const pct = Number(m[1]) / Number(m[2]);
+            // Throttled: saving on every frame grew run.json to 1.1 MB (11k log lines). A 5% cadence
+            // still leaves a fresh timestamp, which is what makes an interrupted render detectable.
+            if (pct - lastRenderHeartbeat >= 0.05) {
+              lastRenderHeartbeat = pct;
+              note(line);
+              save();
+            }
+          },
+        });
     run.videoPath = result.videoPath;
     run.durationSeconds = result.durationSeconds ?? undefined;
     note(`render complete: ${path.basename(result.videoPath)} (${run.durationSeconds?.toFixed(2)}s)`);
@@ -519,9 +719,12 @@ async function assertSceneMoves(
   try {
     await exec('ffmpeg', ['-v', 'error', '-ss', String(at), '-i', videoPath, '-frames:v', '1', '-y', a]);
     await exec('ffmpeg', ['-v', 'error', '-ss', String(at + 1), '-i', videoPath, '-frames:v', '1', '-y', b]);
-    const psnr = await exec('ffmpeg', ['-v', 'error', '-i', a, '-i', b, '-lavfi', 'psnr', '-f', 'null', '-']);
+    // NOTE: no `-v error` here. ffmpeg prints the PSNR summary at INFO level on stderr, so suppressing
+    // it made this check a silent no-op that could never flag a static "animated" scene.
+    const psnr = await exec('ffmpeg', ['-hide_banner', '-i', a, '-i', b, '-lavfi', 'psnr', '-f', 'null', '-'], { combined: true });
     const m = /average:(\d+(?:\.\d+)?|inf)/.exec(psnr);
-    const avg = m ? Number(m[1]) : NaN;
+    if (!m) return `motion check could not read a PSNR for scene ${sceneNumber}`;
+    const avg = Number(m[1]);
     if (Number.isFinite(avg) && avg > 45) {
       return `scene ${sceneNumber} claims a video asset but frames 1s apart are identical (PSNR ${avg} dB) — the animation did not render`;
     }
@@ -563,6 +766,7 @@ function parseArgs(argv: string[]): StorytellerRequest {
       case '--regions': req.regionHighlights = true; break;
       case '--run-id': req.runId = next(); break;
       case '--until': req.until = next() as StorytellerStatus; break;
+      case '--resume': req.resume = true; break;
       case '--help': printUsage(); process.exit(0); break;
       default:
         if (arg.startsWith('http') && !req.url) req.url = arg;
@@ -590,6 +794,8 @@ Options (all optional; defaults come from .env via src/lib/storytellerConfig.ts)
   --regions           Run region detection (needs the :8001 backend)
   --run-id <id>       Reuse/continue a specific run id
   --until <stage>     Stop after a stage (ingesting|storyboarding|images|video|voice) — cheap verification
+  --resume            Reuse runs/<run-id>/ artifacts and redo only localize+render+poster
+                      (with --run-id: finish an interrupted run without re-paying for images/video)
 `);
 }
 

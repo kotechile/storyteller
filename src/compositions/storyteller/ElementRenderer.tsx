@@ -333,6 +333,9 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
           }}
         >
           {hasVideo ? (
+            // NOTE: no `loop` — Remotion's OffthreadVideo does not support it (TS rejects the prop).
+            // kie.ai clips cap at 15s, so a longer scene holds the clip's last frame; the orchestrator
+            // records that as a run warning rather than letting it pass unexplained.
             <OffthreadVideo
               src={element.videoUrl!}
               style={{

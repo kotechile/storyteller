@@ -26,7 +26,7 @@ export function makeRunId(): string {
 export function exec(
   cmd: string,
   args: string[],
-  opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number } = {},
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; combined?: boolean } = {},
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { cwd: opts.cwd ?? process.cwd(), env: { ...process.env, ...opts.env } });
@@ -43,7 +43,9 @@ export function exec(
     child.on('error', (e) => { if (timer) clearTimeout(timer); reject(e); });
     child.on('close', (code) => {
       if (timer) clearTimeout(timer);
-      if (code === 0) resolve(out);
+      // Most tools write their report to stderr (ffmpeg's -af volumedetect, for one), so callers that
+      // parse a report rather than a payload ask for the combined streams.
+      if (code === 0) resolve(opts.combined ? out + err : out);
       else reject(new Error(`${cmd} ${args.slice(0, 4).join(' ')}… exited ${code}\n${(err || out).slice(-2500)}`));
     });
   });
@@ -78,7 +80,7 @@ export async function hasAudioStream(file: string): Promise<boolean> {
  */
 export async function measureMeanVolumeDb(file: string): Promise<number | null> {
   try {
-    const out = await exec('ffmpeg', ['-hide_banner', '-i', file, '-af', 'volumedetect', '-f', 'null', '-']);
+    const out = await exec('ffmpeg', ['-hide_banner', '-i', file, '-af', 'volumedetect', '-f', 'null', '-'], { combined: true });
     const m = /mean_volume:\s*(-?\d+(?:\.\d+)?)\s*dB/.exec(out);
     return m ? Number(m[1]) : null;
   } catch {

@@ -51,13 +51,22 @@ const EXT_BY_MIME: Record<string, string> = {
   'image/avif': 'avif',
 };
 
-/** Best-effort extension: content type first, then the URL, then png. */
-function pickExtension(contentType: string | null, url: string): string {
-  const fromMime = contentType ? EXT_BY_MIME[contentType.split(';')[0].trim().toLowerCase()] : undefined;
+/**
+ * Best-effort extension: content type first, then the URL, then `fallback`.
+ *
+ * The fallback matters: an image defaults to `png`, but a VIDEO must never be named `.png` — the
+ * renderer keys off the extension and refuses to play it. Callers downloading video pass `mp4`.
+ */
+function pickExtension(contentType: string | null, url: string, fallback: 'png' | 'mp4' = 'png'): string {
+  const mime = contentType ? contentType.split(';')[0].trim().toLowerCase() : '';
+  const fromMime = EXT_BY_MIME[mime];
   if (fromMime) return fromMime;
-  const fromUrl = /\.(png|jpe?g|webp|gif|avif)(?:[?#]|$)/i.exec(url);
+  if (mime.startsWith('video/')) return mime.includes('webm') ? 'webm' : fallback;
+  const fromUrl = fallback === 'mp4'
+    ? /\.(mp4|mov|webm)(?:[?#]|$)/i.exec(url)
+    : /\.(png|jpe?g|webp|gif|avif)(?:[?#]|$)/i.exec(url);
   if (fromUrl) return fromUrl[1].toLowerCase().replace('jpeg', 'jpg');
-  return 'png';
+  return fallback;
 }
 
 export function runAssetsDir(opts: LocalizeOptions): string {
@@ -115,6 +124,34 @@ export async function localizeManifestImages(
 
   for (const scene of copy.scenes || []) {
     for (const el of (scene.layout?.elements || []) as any[]) {
+      // Animated scenes carry a video on the SAME short-TTL CDN as the images, and a render that
+      // outlives the url dies on <OffthreadVideo>. Localize it first, independent of element type.
+      if (typeof el.videoUrl === 'string' && /^https?:\/\//i.test(el.videoUrl)) {
+        try {
+          const resp = await fetch(el.videoUrl, { signal: AbortSignal.timeout(120_000) });
+          if (!resp.ok) {
+            warnings.push(`scene ${scene.sceneNumber}: video ${el.videoUrl.substring(0, 70)}… returned HTTP ${resp.status} (expired?) — left as-is`);
+          } else {
+            const buf = Buffer.from(await resp.arrayBuffer());
+            if (buf.byteLength === 0) {
+              warnings.push(`scene ${scene.sceneNumber}: video download was empty — left as-is`);
+            } else {
+              // Force an mp4 fallback: the Seedance CDN can answer without a video content-type and
+              // its url has no extension, which named the file `.png` — a video the renderer then
+              // refused to play (measured: a frozen still for the whole scene).
+              const videoExt = pickExtension(resp.headers.get('content-type'), el.videoUrl, 'mp4');
+              const filename = `vid_${scene.sceneNumber}_${Date.now()}_${Math.floor(Math.random() * 100000)}.${videoExt}`;
+              fs.writeFileSync(path.join(dir, filename), buf);
+              el.videoUrl = assetUrlFor(filename, opts);
+              written.push(path.join(dir, filename));
+              localized++;
+            }
+          }
+        } catch (err) {
+          warnings.push(`scene ${scene.sceneNumber}: could not download video ${el.videoUrl.substring(0, 70)}… — ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
       if (el.type !== 'image') continue;
 
       // A base64 asset can reach this point when the generation-time write was skipped.
@@ -129,10 +166,12 @@ export async function localizeManifestImages(
 
       const src: string | undefined = el.sourceAssetId;
 
-      // Already-local public asset (e.g. /generated_assets/x.png): served by the asset server, so
-      // only the leading part needs making absolute — the renderer must not resolve it itself.
-      if (typeof src === 'string' && src.startsWith('/') && !src.startsWith('//')) {
-        el.sourceAssetId = opts.baseUrl ? `${opts.baseUrl.replace(/\/+$/, '')}${src}` : src;
+      // Already-local public asset: '/generated_assets/x.png' (root-relative) or the bare
+      // 'generated_assets/x.png' the catalog itself stores. Either way the asset server serves it, so
+      // only the leading part needs making absolute — the renderer must never resolve it itself.
+      if (typeof src === 'string' && !src.startsWith('//') && (src.startsWith('/') || src.startsWith('generated_assets/'))) {
+        const rootRelative = src.startsWith('/') ? src : `/${src}`;
+        el.sourceAssetId = opts.baseUrl ? `${opts.baseUrl.replace(/\/+$/, '')}${rootRelative}` : rootRelative;
         localized++;
         continue;
       }
