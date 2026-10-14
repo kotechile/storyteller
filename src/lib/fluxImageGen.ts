@@ -169,13 +169,34 @@ async function submitAndPollKieImage(
 }
 
 /**
+ * Which image task role a scene's style preset should use.
+ *
+ * Verified routing rule (2026-10-13): nano-banana-pro renders infographics, diagrams, charts and
+ * their text well; flux-2/pro-text-to-image is photographic and is *not* good at infographics.
+ * Only the photographic preset goes to Flux. The role → concrete model mapping lives in Supabase
+ * (`llm_used_for`), so swapping models never requires a code change.
+ */
+export const IMAGE_ROLE_BY_STYLE: Record<string, 'image_realistic' | 'image_infographic'> = {
+  'photo-realistic': 'image_realistic',
+};
+
+export function imageRoleForStyle(stylePreset?: string): 'image_realistic' | 'image_infographic' {
+  return IMAGE_ROLE_BY_STYLE[stylePreset || ''] ?? 'image_infographic';
+}
+
+/**
  * Generates images using the configured image model from Supabase llm_models_image table.
  * Optimized for Nano Banana Pro / Gemini / Flux image generation.
  */
 export async function generateFluxImage(
   options: FluxGenerationOptions
 ): Promise<FluxGenerationResult> {
-  const imageConfig = await resolveImageModel(undefined, 'diagram_creator');
+  // Model routing (verified rule, 2026-10-13): nano-banana-pro is the infographic / diagram /
+  // text-rendering model; flux-2/pro-text-to-image is the photographic model and is poor at
+  // infographics. Route by the scene's style preset. Which concrete model each role maps to
+  // lives in Supabase (`llm_used_for`), not here.
+  const imageRole = imageRoleForStyle(options.stylePreset);
+  const imageConfig = await resolveImageModel(undefined, imageRole);
   console.log(`[FluxImageGen] Resolved image model from Supabase: "${imageConfig.modelName}" (provider: ${imageConfig.provider}, apiKey: ${imageConfig.apiKey ? 'PRESENT' : 'MISSING'}, baseUrl: ${imageConfig.baseUrl || 'N/A'})`);
   const stylePreset = options.stylePreset || 'illustration';
   const detailedPrompt = buildStylePrompt(
@@ -184,7 +205,7 @@ export async function generateFluxImage(
     options.infographicLabels,
     options.referenceImage
   );
-  const provider = (imageConfig.provider || 'pollinations').toLowerCase();
+  const provider = (imageConfig.provider || '').toLowerCase();
 
   // 1. Google/Gemini image generation
   if (provider === 'google' || provider === 'gemini' || provider === 'imagen' || provider === 'vertex') {

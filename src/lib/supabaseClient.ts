@@ -346,10 +346,48 @@ export async function resolveImageModel(targetModelName?: string, taskRole?: str
   const actualTaskRole = taskRole || 'diagram_creator';
   const cacheKey = `image:${targetModelName || actualTaskRole}`;
   const cached = getCached<ResolvedImageConfig>(cacheKey);
-  // Never cache the Pollinations fallback
-  if (cached && cached.modelName !== 'pollinations-flux') return cached;
+  if (cached) return cached;
 
   const client = getSupabaseClient();
+
+  // Explicit model-name request (e.g. resolveImageModel('flux-2')): look the model row up by
+  // name. Previously this parameter only fed the cache key and was silently ignored, so any
+  // caller asking for a specific model got the task-role model instead.
+  if (client && targetModelName) {
+    try {
+      const { data: namedRow } = await client
+        .from('llm_models_image')
+        .select('*')
+        .ilike('model_name', `%${targetModelName}%`)
+        .limit(1)
+        .maybeSingle();
+      if (namedRow) {
+        let apiKey: string | null = null;
+        if (namedRow.api_keys_id) {
+          const { data: keyRow } = await client
+            .from('api_keys')
+            .select('key_value')
+            .eq('id', namedRow.api_keys_id)
+            .maybeSingle();
+          if (keyRow?.key_value) apiKey = keyRow.key_value;
+        }
+        if (!apiKey) apiKey = await getApiKey(namedRow.provider);
+        const named: ResolvedImageConfig = {
+          modelName: (namedRow.model_name || '').replace(/\s*\/\s*/g, '/').trim(),
+          displayName: namedRow.display_name,
+          provider: namedRow.provider,
+          apiKey,
+          baseUrl: namedRow.base_url || undefined,
+        };
+        console.log(`[SupabaseClient] Resolved image model by name "${targetModelName}" -> "${named.modelName}" (provider: ${named.provider}). Key present: ${!!named.apiKey}`);
+        if (named.apiKey) setCached(cacheKey, named);
+        return named;
+      }
+      console.warn(`[SupabaseClient] No llm_models_image row matching model_name~"${targetModelName}"`);
+    } catch (err) {
+      console.warn('[SupabaseClient] Image model lookup by name failed:', err);
+    }
+  }
 
   if (client) {
     try {
@@ -421,13 +459,15 @@ export async function resolveImageModel(targetModelName?: string, taskRole?: str
     }
   }
 
-  const defaultConfig: ResolvedImageConfig = {
-    modelName: 'pollinations-flux',
-    displayName: 'Pollinations (Free)',
-    provider: 'pollinations',
-    apiKey: null,
-  };
-  return defaultConfig;
+  // No fake fallback. This used to return `pollinations-flux` with an empty key whenever the
+  // llm_used_for lookup missed — a provider that is not configured and is no longer supported
+  // anywhere in the pipeline (the Pollinations path was removed). A silent miss here produced
+  // blurry off-model images; instead, fail loudly and name the row that is missing.
+  throw new Error(
+    `[SupabaseClient] No image model resolved for used_for="${actualTaskRole}". ` +
+      `Add an llm_used_for row (used_for="${actualTaskRole}", llm_image_id=<an llm_models_image id with a working api_keys_id>). ` +
+      `Expected today: "image_infographic" -> nano-banana-pro, "image_realistic" -> flux-2/pro-text-to-image.`,
+  );
 }
 
 /**
@@ -518,10 +558,12 @@ export async function resolveVideoModel(taskRole: string = 'diagram_creator'): P
     }
   }
 
-  const fallback: ResolvedVideoConfig = {
-    modelName: 'runway-gen3',
-    provider: 'runway',
-    apiKey: null,
-  };
-  return fallback;
+  // No fake fallback. This used to return `runway-gen3` with an empty key — a provider with no
+  // api_keys row here, so every miss degraded into a run that could never generate video. Fail
+  // loudly instead and name the row that is missing.
+  throw new Error(
+    `[SupabaseClient] No video model resolved for used_for="${taskRole}". ` +
+      `Add an llm_used_for row (used_for="${taskRole}", llm_video_id=<an llm_models_video id with a working api_keys_id>). ` +
+      `Expected today: "diagram_creator" / "video_generation" -> bytedance/seedance-2-mini.`,
+  );
 }

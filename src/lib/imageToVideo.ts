@@ -277,7 +277,7 @@ export async function animateImage(options: ImageToVideoOptions): Promise<ImageT
   const videoConfig = await resolveVideoModel('diagram_creator');
 
   // Normalize provider name (Supabase may store "kie.ai" but code uses "kie")
-  const rawProvider = (providerOverride || videoConfig.provider || 'runway').toLowerCase();
+  const rawProvider = (providerOverride || videoConfig.provider || 'kie').toLowerCase();
   let provider: VideoProvider;
   if (rawProvider === 'kie.ai' || rawProvider === 'seedance') provider = 'kie';
   else if (rawProvider === 'luma.ai' || rawProvider === 'lumaai') provider = 'luma';
@@ -285,8 +285,11 @@ export async function animateImage(options: ImageToVideoOptions): Promise<ImageT
   else if (rawProvider === 'sora.ai' || rawProvider === 'soraai' || rawProvider === 'openai') provider = 'sora';
   else provider = rawProvider as VideoProvider;
 
-  if (!videoConfig.apiKey && provider !== 'runway') {
-    console.warn(`[ImageToVideo] No API key for ${provider}. Trying with env vars...`);
+  if (!videoConfig.apiKey) {
+    throw new Error(
+      `[ImageToVideo] No API key for video provider "${provider}" (model: ${videoConfig.modelName}). ` +
+        `Fix the api_keys row behind the llm_models_video row that llm_used_for points at.`,
+    );
   }
 
   console.log(`[ImageToVideo] Animating image with provider "${provider}" (model: ${videoConfig.modelName}, duration: ${duration}s)...`);
@@ -797,7 +800,7 @@ export async function generateVideo(options: TextToVideoOptions): Promise<ImageT
   const videoConfig = await resolveVideoModel('diagram_creator');
 
   // Normalize provider name
-  const rawProvider = (providerOverride || videoConfig.provider || 'runway').toLowerCase();
+  const rawProvider = (providerOverride || videoConfig.provider || 'kie').toLowerCase();
   let provider: VideoProvider;
   if (rawProvider === 'kie.ai' || rawProvider === 'seedance') provider = 'kie';
   else if (rawProvider === 'luma.ai' || rawProvider === 'lumaai') provider = 'luma';
