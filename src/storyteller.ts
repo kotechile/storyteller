@@ -20,6 +20,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 import { ingestUrl, ingestPdf } from './lib/ingest';
+import { ingestLocalFile, isLocalTarget, stripFileScheme } from './lib/localIngest';
 import { generateContextAwareStoryboard, generateVideosForManifest } from './lib/contextEngine';
 import { getOrGenerateConceptImage, isUsableImageRef, normalizeImageRef, resolveManifestImageAssets } from './lib/assetCatalogManager';
 import { synthesizePerSceneSpeech } from './lib/elevenlabsTts';
@@ -397,10 +398,22 @@ export async function runStoryteller(
 
     // ── 1. ingest ──────────────────────────────────────────────────────────────
     setStatus('ingesting');
-    const isPdf = url.toLowerCase().endsWith('.pdf');
-    const article: ArticleData = resumed.article ?? (isPdf ? await ingestPdf(url) : await ingestUrl(url));
+    // Three sources, one shape: a remote page, a remote PDF, or a document on this machine. A local
+    // target is decided by "not http(s)", so `~/notes.md`, `./deck.docx` and `file:///…` all work
+    // without the caller having to host the file first.
+    const localTarget = isLocalTarget(url) ? stripFileScheme(url) : null;
+    const article: ArticleData = resumed.article ?? (
+      localTarget
+        ? await ingestLocalFile(localTarget)
+        : url.toLowerCase().endsWith('.pdf')
+          ? await ingestPdf(url)
+          : await ingestUrl(url)
+    );
     run.title = article.title;
-    note(`ingested "${article.title}" (${article.wordCount} words, ${article.assets.length} article image asset(s))${resumed.article ? ' [reused]' : ''}`);
+    note(
+      `ingested "${article.title}" (${article.wordCount} words, ${article.assets.length} article image asset(s))` +
+        `${localTarget ? ` from ${localTarget}` : ''}${resumed.article ? ' [reused]' : ''}`
+    );
     writeJson(path.join(runDir, 'article.json'), article);
     if (stopAfter('ingesting')) return run;
 
@@ -795,7 +808,9 @@ Storyteller — URL → narrated explainer video (nano-banana-pro + Seedance), u
   npm run storyteller -- --url <url> [options]
 
 Options (all optional; defaults come from .env via src/lib/storytellerConfig.ts):
-  --url <url|pdf>     Target. Defaults to STORYTELLER_DEFAULT_URL.
+  --url <url|file>    Target. An http(s) URL, or a local document: .pdf .md .txt .html .docx
+                      (absolute, ~/…, or ./…). Local reads must stay under $HOME unless
+                      STORYTELLER_LOCAL_ROOTS adds directories (path-delimiter separated).
   --style <preset>    photo-realistic | illustration | flat-vector | infographic | whiteboard
   --aspect <ratio>    16:9 | 9:16 | 1:1
   --voice | --no-voice          Narration (ElevenLabs)

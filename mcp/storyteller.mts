@@ -132,7 +132,12 @@ server.tool(
     'plumbing cheaply, before any image generation is paid for.',
   ].join(' '),
   {
-    url: z.string().optional().describe('Source http(s) URL or path to a .pdf. Falls back to STORYTELLER_DEFAULT_URL.'),
+    url: z
+      .string()
+      .optional()
+      .describe(
+        'Source: an http(s) URL, or a file on this machine — .pdf, .md, .txt, .html, .docx, given as an absolute path, ~/…, ./…, or file:///… . Local reads must stay under $HOME unless STORYTELLER_LOCAL_ROOTS lists more directories. Falls back to STORYTELLER_DEFAULT_URL.',
+      ),
     style: z.string().optional().describe(`Image style preset: ${STYLE_PRESETS.join(' | ')}. Infographic-ish styles route to nano-banana-pro; "photo-realistic" routes to Flux 2.`),
     aspect: z.enum(['16:9', '9:16', '1:1']).optional().describe('Output aspect ratio (default 16:9 → 1920x1080).'),
     voice: z.boolean().optional().describe('ElevenLabs narration. On by default; a silent result is treated as a failure, not shipped.'),

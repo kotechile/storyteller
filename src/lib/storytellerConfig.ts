@@ -142,17 +142,32 @@ export function loadStorytellerConfig(env: NodeJS.ProcessEnv = process.env): Sto
   };
 }
 
-/** Resolves the effective URL, or explains exactly which env var to set. */
+/**
+ * Resolves the effective target, or explains exactly which env var to set.
+ *
+ * A target is either an http(s) URL or a document on this machine (`./notes.md`, `~/Downloads/x.pdf`,
+ * `file:///…`). Local paths are validated for existence/extensions in `ingestLocalFile` — this gate
+ * only has to reject the shapes that can never be either, so a blank string or an argument-looking
+ * value fails here with the var named instead of surfacing as a confusing fetch error later.
+ */
 export function resolveTargetUrl(requested: string | undefined, cfg: StorytellerConfig): string {
   const url = str(requested) || cfg.defaultUrl;
   if (!url) {
     throw new Error(
       '[storyteller] No URL supplied. Pass `url` in the request (MCP `storyteller_generate`, or ' +
-        '`npm run storyteller -- --url <url>`) or set STORYTELLER_DEFAULT_URL in .env for argument-free runs.',
+        '`npm run storyteller -- --url <url|file>`) or set STORYTELLER_DEFAULT_URL in .env for argument-free runs.',
     );
   }
-  if (!/^https?:\/\//i.test(url) && !url.toLowerCase().endsWith('.pdf')) {
-    throw new Error(`[storyteller] "${url}" is not an http(s) URL or a .pdf path.`);
-  }
-  return url;
+  if (/^https?:\/\//i.test(url) || /^file:\/\//i.test(url)) return url;
+
+  const looksLikePath =
+    url.startsWith('~') || url.startsWith('/') || url.startsWith('./') || url.startsWith('../');
+  const supportedExtension = /\.(pdf|txt|text|md|markdown|mdx|rst|csv|log|html?|xhtml|docx)$/i.test(url);
+
+  if (looksLikePath || supportedExtension) return url;
+
+  throw new Error(
+    `[storyteller] "${url}" is not an http(s) URL or a readable file. Pass a URL, or a path to a ` +
+      `.pdf / .md / .txt / .html / .docx (absolute, ~/…, or ./…).`,
+  );
 }
