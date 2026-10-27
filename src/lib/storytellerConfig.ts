@@ -79,19 +79,16 @@ export interface StorytellerConfig {
   /** Reference model names — used to detect config drift, not to select the model. */
   expected: { videoModel: string; imageInfographicModel: string; imageRealisticModel: string };
 
+  /** Title / description / tags generation (no upload — publishing is not wired). */
+  metadata: { enabled: boolean; titleMaxChars: number; keywords: string[] };
+
   regionHighlights: boolean;
   concurrency: number;
   paths: { runsDir: string; publicDir: string };
-  publish: { enabled: boolean; privacy: 'private' | 'unlisted' | 'public' };
   apiBaseUrl: string;
 }
 
 export function loadStorytellerConfig(env: NodeJS.ProcessEnv = process.env): StorytellerConfig {
-  const privacyRaw = str(env.STORYTELLER_YOUTUBE_PRIVACY || env.OMNICAST_YOUTUBE_PRIVACY, 'unlisted');
-  if (privacyRaw !== 'private' && privacyRaw !== 'unlisted' && privacyRaw !== 'public') {
-    throw new Error(`[storytellerConfig] YOUTUBE privacy="${privacyRaw}" is invalid. Expected private, unlisted or public.`);
-  }
-
   return {
     defaultUrl: str(env.STORYTELLER_DEFAULT_URL),
     style: assertIn('STORYTELLER_STYLE', str(env.STORYTELLER_STYLE, 'infographic'), STYLE_PRESETS),
@@ -134,9 +131,10 @@ export function loadStorytellerConfig(env: NodeJS.ProcessEnv = process.env): Sto
       runsDir: str(env.STORYTELLER_RUNS_DIR || env.OMNICAST_RUNS_DIR, 'runs'),
       publicDir: expandHome(str(env.STORYTELLER_PUBLIC_DIR || env.OMNICAST_PUBLIC_DIR, 'public')),
     },
-    publish: {
-      enabled: bool(env.STORYTELLER_PUBLISH, false),
-      privacy: privacyRaw,
+    metadata: {
+      enabled: bool(env.STORYTELLER_METADATA, true),
+      titleMaxChars: num(env.STORYTELLER_TITLE_MAX_CHARS, 100),
+      keywords: list(env.STORYTELLER_KEYWORDS),
     },
     apiBaseUrl: str(env.STORYTELLER_API_BASE_URL),
   };

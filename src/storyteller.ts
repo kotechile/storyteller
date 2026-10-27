@@ -24,6 +24,7 @@ import { ingestLocalFile, isLocalTarget, stripFileScheme } from './lib/localInge
 import { generateContextAwareStoryboard, generateVideosForManifest } from './lib/contextEngine';
 import { getOrGenerateConceptImage, isUsableImageRef, normalizeImageRef, resolveManifestImageAssets } from './lib/assetCatalogManager';
 import { synthesizePerSceneSpeech } from './lib/elevenlabsTts';
+import { generateVideoMetadata } from './lib/metadataEngine';
 import { isGroundingDinoAvailable } from './lib/groundingDinoClient';
 import { generateRegionFocusEvents } from './lib/regionSync';
 import { startPublicServer, type PublicServer } from './lib/assetServer';
@@ -66,6 +67,7 @@ export type StorytellerStatus =
   | 'images'
   | 'video'
   | 'voice'
+  | 'metadata'
   | 'regions'
   | 'localizing'
   | 'rendering'
@@ -118,6 +120,7 @@ export interface StorytellerRun {
   posterPath?: string;
   durationSeconds?: number;
   meanVolumeDb?: number | null;
+  metadata?: { title: string; keyword: string; tags: number; path: string };
   warnings: string[];
   corrections: string[];
   log: string[];
@@ -532,6 +535,36 @@ export async function runStoryteller(
     }
     if (stopAfter('voice')) return run;
 
+    // ── 5b. metadata: title / description / tags (gated, no upload) ───────────
+    if (cfg.metadata.enabled) {
+      setStatus('metadata');
+      try {
+        const md = await generateVideoMetadata({
+          manifest,
+          articleTitle: article.title,
+          articleUrl: url,
+          sceneAudio,
+          seedKeywords: cfg.metadata.keywords,
+          titleMaxChars: cfg.metadata.titleMaxChars,
+        });
+        for (const w of md.warnings) warn(w);
+        for (const c of md.corrections) {
+          run.corrections.push(c);
+          note(`metadata correction: ${c}`);
+        }
+        const metadataPath = path.join(runDir, 'metadata.json');
+        writeJson(metadataPath, md);
+        fs.writeFileSync(path.join(runDir, 'share-copy.txt'), `${md.title}\n\n${md.description}\n`, 'utf-8');
+        run.metadata = { title: md.title, keyword: md.keyword, tags: md.tags.length, path: metadataPath };
+        note(`metadata: title="${md.title}" (keyword: ${md.keyword}, ${md.tags.length} tags)`);
+      } catch (err) {
+        // Metadata is not the video: a failed title must not throw away a finished render, but it
+        // must be visible rather than silently shipping the raw article title as if it were chosen.
+        warn(`metadata generation failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      if (stopAfter('metadata')) return run;
+    }
+
     // ── 6. region highlights (optional; needs the EasyOCR/DINO backend) ───────
     if (cfg.regionHighlights) {
       setStatus('regions');
@@ -831,7 +864,13 @@ Options (all optional; defaults come from .env via src/lib/storytellerConfig.ts)
 if (require.main === module) {
   runStoryteller(parseArgs(process.argv.slice(2)))
     .then((run) => {
-      console.log(`\n✅ ${run.runId}: ${run.videoPath}`);
+      // A partial run has no video: saying "✅ <path>" for one is a false success message.
+      if (run.partial) {
+        console.log(`\n⏸  ${run.runId}: stopped after "${run.status}" (--until) — no video rendered. Artifacts: ${run.runDir}`);
+      } else {
+        console.log(`\n✅ ${run.runId}: ${run.videoPath}`);
+      }
+      if (run.metadata) console.log(`🏷  title: ${run.metadata.title}`);
       if (run.warnings.length) console.log(`⚠️  ${run.warnings.length} warning(s) — see runs/${run.runId}/run.json`);
     })
     .catch((err) => {
