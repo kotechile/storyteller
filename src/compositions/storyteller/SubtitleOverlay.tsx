@@ -39,7 +39,7 @@ export const SubtitleOverlay: React.FC<SubtitleOverlayProps> = ({
   const frame = useCurrentFrame();
   const currentTimeSec = frame / fps;
 
-  const fontSize = config?.fontSize ?? 32;
+  const fontSize = config?.fontSize ?? 44;
   const color = config?.color ?? '#FFFFFF';
   const backgroundColor = config?.backgroundColor ?? 'rgba(0, 0, 0, 0.65)';
   const highlightActiveWord = config?.highlightActiveWord !== false;

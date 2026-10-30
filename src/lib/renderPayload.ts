@@ -122,7 +122,19 @@ export function assertRenderablePayload(payload: RenderPayload, opts: { voiceExp
  */
 export async function renderExplainer(
   payload: RenderPayload,
-  opts: { videoPath: string; propsPath?: string; logPath?: string; onProgress?: (line: string) => void },
+  opts: {
+    videoPath: string;
+    propsPath?: string;
+    logPath?: string;
+    onProgress?: (line: string) => void;
+    /**
+     * Encoder settings. Explicit because the first published render defaulted into 720 kbps +
+     * `yuvj420p` (full-range JPEG colour), which YouTube re-encoded into soft text. 1080p text-heavy
+     * graphics need constant-quality, a sharp x264 preset, a PNG frame source and a broadcast colour
+     * space; the pixel format must be limited-range `yuv420p` or players stretch the contrast.
+     */
+    quality?: { crf?: number; preset?: string; scale?: number };
+  },
 ): Promise<RenderResult> {
   const projectRoot = process.cwd();
   const propsPath = opts.propsPath || path.join(path.dirname(opts.videoPath), 'storyboard_props.json');
@@ -142,9 +154,19 @@ export async function renderExplainer(
   const args = [
     'render', 'src/index.ts', 'StorytellerExplainer', tempOutput,
     `--props=${propsPath}`, '--codec=h264', '--concurrency=1',
+    // Quality: without these Remotion picked settings that produced a 720 kbps yuvj420p file.
+    `--crf=${opts.quality?.crf ?? 17}`,
+    `--x264-preset=${opts.quality?.preset ?? 'medium'}`,
+    '--pixel-format=yuv420p',
+    '--color-space=bt709',
+    '--image-format=png',
+    ...(opts.quality?.scale && opts.quality.scale !== 1 ? [`--scale=${opts.quality.scale}`] : []),
   ];
 
   const logStream = fs.createWriteStream(logPath);
+  // Record the encoder settings in the log: "why does this render look soft" is answerable only if
+  // the settings that produced it are on disk next to the video.
+  logStream.write(`[render] ${cmd} ${args.join(' ')}\n`);
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn(cmd, args, { cwd: projectRoot, stdio: 'pipe' });

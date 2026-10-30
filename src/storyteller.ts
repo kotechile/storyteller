@@ -331,9 +331,17 @@ export async function runStoryteller(
   onProgress?: (run: StorytellerRun) => void,
 ): Promise<StorytellerRun> {
   const cfg = applyOverrides(loadStorytellerConfig(), req);
-  const url = resolveTargetUrl(req.url, cfg);
   const runId = req.runId ?? makeRunId();
   const runDir = path.resolve(cfg.paths.runsDir, runId);
+
+  /**
+   * `--resume --run-id X` must not require the URL again: the run record already holds the target it
+   * was started from, and the whole point of resume is to finish an interrupted run without retyping
+   * (or remembering) what it was. Re-reading it here is what makes resume a single flag.
+   */
+  const priorRun = req.resume ? readRunRecord<StorytellerRun>(runDir) : null;
+  const url = resolveTargetUrl(req.url ?? priorRun?.url, cfg);
+
   fs.mkdirSync(runDir, { recursive: true });
 
   const run: StorytellerRun = readRunRecord<StorytellerRun>(runDir) ?? {
@@ -643,7 +651,7 @@ export async function runStoryteller(
         subtitle: cfg.captions && cfg.voice.enabled
           ? {
               enabled: true,
-              fontSize: 32,
+              fontSize: cfg.captionFontSize,
               color: '#FFFFFF',
               backgroundColor: 'rgba(0, 0, 0, 0.65)',
               highlightActiveWord: true,
@@ -688,6 +696,7 @@ export async function runStoryteller(
           videoPath,
           propsPath,
           logPath: path.join(runDir, 'render.log'),
+          quality: cfg.render,
           onProgress: (line) => {
             const m = /rendering (\d+)\/(\d+)/.exec(line);
             if (!m) return;

@@ -68,6 +68,28 @@ export interface StorytellerConfig {
   };
   music: { trackId: string };
   captions: boolean;
+  /**
+   * Burned-in caption size in px at 1080p.
+   *
+   * 32 was too small to read on a phone at arm's length, which is where most of these videos are
+   * watched: the caption bar sat at roughly 3% of frame height. 44 keeps a 10-word chunk to two
+   * lines inside the 85% bar and stays legible on a 5-inch screen.
+   */
+  captionFontSize: number;
+
+  /**
+   * Render quality. The first published render came out at 720 kbps with `yuvj420p` — a full-range
+   * JPEG colour space — which YouTube re-encoded into mush on text-heavy infographics. These are
+   * explicit rather than Remotion defaults so the settings that produced a video are reproducible.
+   */
+  render: {
+    /** x264 constant-quality factor; lower is better. 17 is visually lossless-ish for flat graphics. */
+    crf: number;
+    /** x264 speed/compression trade-off. `slow` costs render time and buys sharpness on text. */
+    preset: string;
+    /** Output scale. 2 renders 4K (3840x2160), which nudges YouTube onto VP9/AV1 instead of AVC. */
+    scale: number;
+  };
 
   storyboard: { research: boolean; focusTopics: string[]; recommendedSceneCount: number };
 
@@ -107,6 +129,15 @@ export function loadStorytellerConfig(env: NodeJS.ProcessEnv = process.env): Sto
     },
     music: { trackId: str(env.STORYTELLER_MUSIC_TRACK) },
     captions: bool(env.STORYTELLER_CAPTIONS, true),
+    captionFontSize: num(env.STORYTELLER_CAPTION_FONT_SIZE, 44),
+
+    render: {
+      crf: num(env.STORYTELLER_RENDER_CRF, 17),
+      // `medium` is the default trade: `slow` buys a few percent of compression for ~1.5x render
+      // time, which is real money on a 6-minute unattended render.
+      preset: str(env.STORYTELLER_RENDER_PRESET, 'medium'),
+      scale: num(env.STORYTELLER_RENDER_SCALE, 1),
+    },
 
     storyboard: {
       // Replaces the interactive CLI prompts: neither may block an unattended run.
