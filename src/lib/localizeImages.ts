@@ -106,6 +106,51 @@ export function saveGeneratedImage(
 }
 
 /**
+ * ISO base media file format ("ftyp" box) — mp4/mov, which is what Seedance returns whatever the
+ * content-type header says. Sniffing beats trusting either the header or the filename: a previous
+ * attempt saved four 13.6 MB MP4s named `.png` because the CDN answered with an image content-type.
+ */
+function isIsoBmff(head: Buffer): boolean {
+  return head.length >= 8 && head.toString('latin1', 4, 8) === 'ftyp';
+}
+
+/**
+ * A clip this run already downloaded, by scene number.
+ *
+ * The provider URL lives for hours, not weeks, so a resumed render that re-fetches it dies — measured:
+ * `tempfile.aiquickdraw.com/…` answered 404 and the render failed at frame 2469 of 11218, making an
+ * already-rendered video impossible to reproduce at all. The copy on disk is the source of truth; the
+ * URL is a one-time courier.
+ */
+function findLocalVideo(dir: string, sceneNumber: number): string | null {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return null;
+  }
+  const prefix = `vid_${sceneNumber}_`;
+  // Descending: the timestamp is embedded in the name, so this is newest-first.
+  const candidates = entries.filter((file) => file.startsWith(prefix)).sort().reverse();
+  for (const file of candidates) {
+    const abs = path.join(dir, file);
+    try {
+      const head = Buffer.alloc(12);
+      const fd = fs.openSync(abs, 'r');
+      try {
+        fs.readSync(fd, head, 0, 12, 0);
+      } finally {
+        fs.closeSync(fd);
+      }
+      if (isIsoBmff(head)) return file;
+    } catch {
+      // Unreadable or truncated: try the next one rather than shipping a broken clip.
+    }
+  }
+  return null;
+}
+
+/**
  * Downloads every remote `http(s)` image in the manifest into the run's asset dir and rewrites
  * `sourceAssetId`. Returns a deep copy; the input manifest is never mutated (image_to_video still
  * needs the ORIGINAL remote url as its `first_frame_url` — kie.ai cannot fetch localhost).
@@ -127,6 +172,17 @@ export async function localizeManifestImages(
       // Animated scenes carry a video on the SAME short-TTL CDN as the images, and a render that
       // outlives the url dies on <OffthreadVideo>. Localize it first, independent of element type.
       if (typeof el.videoUrl === 'string' && /^https?:\/\//i.test(el.videoUrl)) {
+        // Prefer a clip an earlier attempt already downloaded. Re-fetching is only correct the first
+        // time; afterwards the URL is a liability (it expires) and the file is the artifact.
+        const existing = findLocalVideo(dir, scene.sceneNumber);
+        if (existing) {
+          el.videoUrl = assetUrlFor(existing, opts);
+          warnings.push(
+            `scene ${scene.sceneNumber}: reused the clip already on disk (${existing}) instead of ` +
+              `the provider url, which expires and 404s a resumed render`,
+          );
+          localized++;
+        } else {
         try {
           const resp = await fetch(el.videoUrl, { signal: AbortSignal.timeout(120_000) });
           if (!resp.ok) {
@@ -136,10 +192,12 @@ export async function localizeManifestImages(
             if (buf.byteLength === 0) {
               warnings.push(`scene ${scene.sceneNumber}: video download was empty — left as-is`);
             } else {
-              // Force an mp4 fallback: the Seedance CDN can answer without a video content-type and
-              // its url has no extension, which named the file `.png` — a video the renderer then
-              // refused to play (measured: a frozen still for the whole scene).
-              const videoExt = pickExtension(resp.headers.get('content-type'), el.videoUrl, 'mp4');
+              // Sniff the container: the Seedance CDN can answer with an image content-type and a url
+              // that has no extension, which once named a real MP4 `.png` — a "still" scene the
+              // renderer refused to play. Bytes decide the extension, not headers.
+              const videoExt = isIsoBmff(buf)
+                ? 'mp4'
+                : pickExtension(resp.headers.get('content-type'), el.videoUrl, 'mp4');
               const filename = `vid_${scene.sceneNumber}_${Date.now()}_${Math.floor(Math.random() * 100000)}.${videoExt}`;
               fs.writeFileSync(path.join(dir, filename), buf);
               el.videoUrl = assetUrlFor(filename, opts);
@@ -149,6 +207,7 @@ export async function localizeManifestImages(
           }
         } catch (err) {
           warnings.push(`scene ${scene.sceneNumber}: could not download video ${el.videoUrl.substring(0, 70)}… — ${err instanceof Error ? err.message : String(err)}`);
+        }
         }
       }
 
