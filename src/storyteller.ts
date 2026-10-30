@@ -741,6 +741,11 @@ export async function runStoryteller(
     note(`verified: ${finalDuration?.toFixed(2)}s, audio stream: ${hasAudio}, mean volume: ${run.meanVolumeDb ?? 'n/a'} dB`);
 
     setStatus('done');
+    // `partial` is a fact about how a run ENDED, so it must not survive a run that finished: a
+    // resumed run inherits it from run.json, and the CLI then prints "no video rendered" while a
+    // 49 MB final.mp4 sits next to run.json.
+    run.partial = false;
+    save();
     return run;
   } catch (err) {
     run.error = err instanceof Error ? err.message : String(err);
@@ -873,11 +878,14 @@ Options (all optional; defaults come from .env via src/lib/storytellerConfig.ts)
 if (require.main === module) {
   runStoryteller(parseArgs(process.argv.slice(2)))
     .then((run) => {
-      // A partial run has no video: saying "✅ <path>" for one is a false success message.
-      if (run.partial) {
+      // The video on disk decides the message, not a sticky `partial` flag: a resumed run can carry
+      // `partial: true` from the attempt it recovered from.
+      if (run.videoPath && run.status === 'done') {
+        console.log(`\n✅ ${run.runId}: ${run.videoPath}`);
+      } else if (run.partial) {
         console.log(`\n⏸  ${run.runId}: stopped after "${run.status}" (--until) — no video rendered. Artifacts: ${run.runDir}`);
       } else {
-        console.log(`\n✅ ${run.runId}: ${run.videoPath}`);
+        console.log(`\n⚠️  ${run.runId}: ${run.status}${run.error ? ` — ${run.error.split('\n')[0]}` : ''}. Artifacts: ${run.runDir}`);
       }
       if (run.metadata) console.log(`🏷  title: ${run.metadata.title}`);
       if (run.warnings.length) console.log(`⚠️  ${run.warnings.length} warning(s) — see runs/${run.runId}/run.json`);
