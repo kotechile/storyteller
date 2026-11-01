@@ -51,7 +51,33 @@ export interface PublicServer {
   close: () => Promise<void>;
 }
 
-/** Starts a static server rooted at `publicDir` on an ephemeral port. */
+/**
+ * Pipe a file to the response WITHOUT letting a read error take the whole render down.
+ *
+ * `fs.createReadStream(...).pipe(res)` has no error handling: a stream 'error' event with no listener
+ * is re-thrown as an unhandled exception, so ONE unreadable asset (an iCloud-evicted file returns
+ * EAGAIN, i.e. "Unknown system error -11") kills an otherwise healthy 40-minute render at whatever
+ * frame first requested it. Measured: the render died at frame 155 of 11218 this way.
+ *
+ * A failed asset should be a 500 and a recorded missing path, which the orchestrator already writes
+ * into run.json — a documentable gap in the video, not a dead process.
+ */
+function streamToResponse(
+  stream: fs.ReadStream,
+  res: import('node:http').ServerResponse,
+  label: string,
+): void {
+  stream.on('error', (err: NodeJS.ErrnoException) => {
+    console.warn(`[assetServer] read failed for ${label}: ${err.code ?? ''} ${err.message}`.trim());
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+    }
+    res.end(`asset read failed: ${err.code ?? 'error'}`);
+  });
+  res.on('close', () => stream.destroy());
+  stream.pipe(res);
+}
+
 export async function startPublicServer(publicDir: string): Promise<PublicServer> {
   const root = path.resolve(publicDir);
   if (!fs.existsSync(root)) {
@@ -102,7 +128,7 @@ export async function startPublicServer(publicDir: string): Promise<PublicServer
         'Content-Range': `bytes ${start}-${end}/${stat.size}`,
         'Accept-Ranges': 'bytes',
       });
-      fs.createReadStream(resolved, { start, end }).pipe(res);
+      streamToResponse(fs.createReadStream(resolved, { start, end }), res, req.url ?? resolved);
       return;
     }
 
@@ -115,7 +141,7 @@ export async function startPublicServer(publicDir: string): Promise<PublicServer
       res.end();
       return;
     }
-    fs.createReadStream(resolved).pipe(res);
+    streamToResponse(fs.createReadStream(resolved), res, req.url ?? resolved);
   });
 
   await new Promise<void>((resolve, reject) => {

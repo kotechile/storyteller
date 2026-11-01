@@ -829,6 +829,9 @@ function parseArgs(argv: string[]): StorytellerRequest {
       case '--aspect': req.aspect = next() as keyof typeof FORMATS; break;
       case '--voice': req.voice = true; break;
       case '--no-voice': req.voice = false; break;
+      // Voice selection was env-only (STORYTELLER_VOICE_ID) or MCP-only, so the CLI could not try a
+      // different voice for one run without editing .env.
+      case '--voice-id': req.voiceId = next(); break;
       case '--speed': req.speed = Number(next()); break;
       case '--stability': req.stability = Number(next()); break;
       case '--similarity': req.similarityBoost = Number(next()); break;
@@ -861,6 +864,8 @@ Options (all optional; defaults come from .env via src/lib/storytellerConfig.ts)
   --style <preset>    photo-realistic | illustration | flat-vector | infographic | whiteboard
   --aspect <ratio>    16:9 | 9:16 | 1:1
   --voice | --no-voice          Narration (ElevenLabs)
+  --voice-id <id>     ElevenLabs voice id for THIS run (default STORYTELLER_VOICE_ID).
+                      Copy an id from the ElevenLabs dashboard: Voices → ⋯ → Copy voice ID.
   --speed <n>         Narration speed (0.7–1.2)
   --stability <n>     ElevenLabs voice stability 0–1 (default 0.5)
   --similarity <n>    ElevenLabs similarity boost 0–1 (default 0.75)

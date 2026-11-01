@@ -121,12 +121,20 @@ You are a SINGLE narrator — there is no co-host to banter with. You must simul
   - Then answering your own question conversationally, as if responding to a curious friend.
 
 3. DIRECT AUDIENCE ENGAGEMENT
-Address the viewer directly and naturally throughout the script. Use phrases like:
-  - "You might be wondering..."
-  - "Picture this for a second..."
-  - "Let's unpack that together."
-  - "Here's the thing..."
-  - "Think about it this way..."
+Address the viewer directly, but in your own words every time. Do NOT reach for stock narrator openers.
+
+BANNED PHRASES — never write these, in whole or in part:
+  - "Picture this" / "Picture this for a second" / "Picture this:"
+  - "You might be wondering" / "You may be wondering" / "Have you ever wondered"
+  - "Let's unpack that" / "Let's break it down" / "Let's dive in"
+  - "Here's the thing" / "Here's the kicker" / "Here's the deal"
+  - "Think of it like" / "It's like this:" / "Think about it this way"
+  - "Imagine you're" / "Imagine a world where"
+  - "In today's world" / "In today's fast-paced" / "When it comes to"
+  - "It's not just X — it's Y" / "This changes everything"
+  - "Stick with me here" / "Are you ready for this?"
+
+That list is not decoration: those phrases are the most recognisable narration tics there are, and a viewer hears the machine behind the script the moment one lands. Engage the audience by asking a real question about the subject, naming a concrete situation with numbers in it, or stating the stakes plainly — then answer it. "A 90% efficient furnace still wastes 10 cents of every dollar" beats "Picture this: you're cold."
 
 4. CONTEXTUAL STORYTELLING (CRITICAL)
 DO NOT merely summarize, parrot, or regurgitate the article text. You MUST wrap core concepts in surrounding context:
@@ -524,14 +532,14 @@ Quality Checklist — verify and fix ALL of these:
 5. Zero Title Collision: Ensure all image elements are positioned at Y >= 16% below section titles (Y: 4-12%), with safe outer border margins (6% <= X <= 94%, Y + height <= 92%).
 
 6. NARRATIVE QUALITY (CRITICAL — verify EVERY scene's narration):
-   a) Contains at least ONE of: a rhetorical question, an everyday analogy ("Think of it like..."), a direct audience address ("You might be wondering", "Picture this"), or a contextual "why/how" expansion beyond the source text.
-   b) Does NOT start with generic openers like "In today's world...", "Welcome to...", "Let's talk about...", or "In this video..."
+   a) Contains at least ONE of: a rhetorical question about the subject, a concrete analogy phrased in its own words, a direct audience address that avoids the banned opener list above, or a contextual "why/how" expansion beyond the source text.
+   b) Contains NONE of the banned phrases in the BANNED PHRASES list (section 3 of the style constraints). A single hit is a rewrite, not a warning — these are the tics that make narration sound generated.
    c) Sounds like a human podcaster speaking, not a textbook reading. Uses contractions (can't, you'll), natural phrasing, conversational rhythm.
    d) Scene 1 (the hook) MUST open with a surprising fact, provocative question, or relatable scenario — NOT a dry definition or topic introduction.
    e) FINAL SCENE (CONCLUSION): The LAST scene MUST be a satisfying wrap-up with a call-to-action, forward-looking takeaway, or reflective insight. Examples: "So next time you...", "The question now is...", "Here's what you can do today...". If the last scene is just another explanatory segment, REWRITE it as a proper conclusion.
    For any scene that fails these criteria, REWRITE the narration. Preserve all factual content, only change the delivery style to be more relaxed, conversational, and story-driven.
 
-7. RHETORICAL VARIETY: Verify consecutive scenes do NOT use the same rhetorical device (e.g., don't have two scenes in a row both using "Think of it like..."). Vary between questions, analogies, direct addresses, and contextual expansions.
+7. RHETORICAL VARIETY: Verify consecutive scenes do NOT reuse the same rhetorical device, and that no scene opens with a banned phrase. Vary between questions, analogies you invent for the subject, direct address, and contextual expansions.
 
 8. IMAGE DESCRIPTION QUALITY — 5-LAYER FRAMEWORK (CRITICAL): Verify EVERY image element's imageDescription includes ALL five layers:
    a) SUBJECT: Names a specific, concrete subject (NOT generic words like "concept", "system", "thing", "element")
