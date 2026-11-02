@@ -39,6 +39,12 @@ export interface NarrativeEngineOptions {
   voiceId?: string;
   focusTopics?: string[];
   allowExternalResearch?: boolean;
+  /**
+   * How many scenes the run can actually animate (the Seedance cost cap). The planner must be told:
+   * a 15s provider clip covers ~35 words of narration, so an "animated" tag on a 100-word scene is a
+   * promise the renderer cannot keep. Defaults to 0 (planning for stills and diagrams only).
+   */
+  animatedSceneBudget?: number;
 }
 
 /**
@@ -257,6 +263,11 @@ CRITICAL: Selecting focus topics does NOT mean excluding the rest of the article
         : 'Label scenes as System Components. Focus on architecture diagrams and flow visualizations.'
     }`;
 
+    const animatedBudget = Math.max(0, Number(options.animatedSceneBudget) || 0);
+    const animatedBudgetRule = animatedBudget > 0
+      ? `ANIMATION BUDGET: this run can animate at most ${animatedBudget} scene(s) (cost cap). Therefore EXACTLY ${animatedBudget} scene(s) — the hook, the cinematic interlude, and closing transitions in that order — must be tagged "image_to_video" or "text_to_video", and EACH of those scenes must keep its narration to 35 words or fewer (~14 seconds). Every other scene stays "programmatic" or "static" and may be as long as the argument needs. Writing a 100-word scene and tagging it animated is a promise the renderer cannot keep: the provider clip is 15 seconds, so the scene would freeze on its last frame.`
+      : `ANIMATION BUDGET: this run animates nothing. Use only "programmatic" and "static" strategies; narration length is unconstrained.`;
+
     const prompt2Text = `ROLE AND PRIMARY OBJECTIVE
 You are an expert cinematic art director, visual prompt engineer, and storyboard artist. Your job is to translate the narrative script below into a storyboard JSON where every image's "imageDescription" is a production-grade, five-layer cinematic prompt that an AI image generation model can render into a rich, professional keyframe.
 
@@ -376,11 +387,8 @@ Every scene MUST include an "animationStrategy" field. Classify each scene by ho
 
 - "static" — Use for simple single-fact scenes, title cards (sceneNumber: 0), closing/conclusion cards, quote overlays. No animation.
 
-CLIP LENGTH LIMIT (HARD CONSTRAINT — applies to image_to_video and text_to_video):
-The video provider clips at 15 seconds. An animated scene whose narration runs longer than that plays its clip and then holds the last frame for the remainder — which reads as a frozen video, and is the single most common quality complaint about these renders. So:
-  - Only tag a scene "image_to_video" or "text_to_video" if its narration is about 37 words or fewer (~14-15 seconds at a natural speaking pace). Count the words before you decide.
-  - If a scene needs more than ~37 words, it must be "programmatic" (diagram built from elements) or "static" (still image). Do not split a scene purely to qualify for animation — the reveal timing and the argument both break.
-  - Scenes 0 (title), the cinematic interlude, and the conclusion are the natural animation candidates; a long explanatory scene is not.
+CLIP LENGTH LIMIT (HARD CONSTRAINT):
+The video provider clips at 15 seconds, which covers about 35 words of narration at a natural speaking pace. ${animatedBudgetRule}
 
 ═══════════════════════════════════════
 CINEMATIC INTERLUDE (REQUIRED — EXACTLY ONE SCENE)

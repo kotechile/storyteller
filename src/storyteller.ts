@@ -479,6 +479,10 @@ export async function runStoryteller(
       focusTopics: cfg.storyboard.focusTopics.filter((t) => t.toLowerCase() !== 'all'),
       allowExternalResearch: cfg.storyboard.research,
       recommendedSceneCount: cfg.storyboard.recommendedSceneCount || undefined,
+      // The planner needs to know how many scenes can actually be animated, because the provider clip
+      // is 15s (~35 words). Without this it tags long scenes animated and the gate has to take the
+      // motion away afterwards — a plan that promises something the renderer cannot deliver.
+      animatedSceneBudget: cfg.video.enabled ? cfg.video.maxScenes : 0,
       bypassCache: true,
     } as any;
 
