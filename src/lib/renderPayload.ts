@@ -60,6 +60,7 @@ export function buildRenderPayload(args: {
   lighting?: unknown;
   annotationConfig?: unknown;
   logoUrl?: string;
+  titleFontSize?: number;
   articleUrl?: string;
 }): RenderPayload {
   const sceneAudio = args.sceneAudio || [];
@@ -74,6 +75,7 @@ export function buildRenderPayload(args: {
     lighting: typeof args.lighting === 'string' ? args.lighting : undefined,
     annotationConfig: args.annotationConfig as ExplainerCompositionProps['annotationConfig'],
     logoUrl: args.logoUrl || undefined,
+    titleFontSize: args.titleFontSize || undefined,
     articleUrl: args.articleUrl || undefined,
   };
   return payload;

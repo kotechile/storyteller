@@ -286,6 +286,11 @@ export interface ExplainerCompositionProps {
   annotationConfig?: AnnotationConfig;
   /** Optional company logo URL — displayed in Scene 1 and closing card */
   logoUrl?: string;
+  /**
+   * Intro title size in px (default 84). The title card shipped at 56, which reads small on a phone —
+   * it is the one line every viewer sees before deciding to keep watching.
+   */
+  titleFontSize?: number;
   /** Base URL for serving audio files (e.g. http://localhost:3001) */
   audioBaseUrl?: string;
 }

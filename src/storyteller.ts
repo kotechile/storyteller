@@ -370,6 +370,27 @@ function fitScenesToAudio(
   return manifest;
 }
 
+/**
+ * Pick the brand logo out of a folder that the asset server already serves.
+ *
+ * The point is that the workflow is "drop a file in", not "edit a config". The first image in the
+ * folder (sorted by name) wins, so several brand variants can live there without ambiguity. Returns
+ * undefined when the folder or its images are missing — the caller warns, and the intro and closing
+ * card render without a logo rather than failing the run for a decoration.
+ */
+function resolveBrandLogo(publicDir: string, logoDir: string, baseUrl: string): string | undefined {
+  const cleaned = (logoDir || '').trim().replace(/^\/+|\/+$/g, '');
+  if (!cleaned) return undefined;
+  const dir = path.resolve(publicDir, cleaned);
+  if (!fs.existsSync(dir)) return undefined;
+  const file = fs
+    .readdirSync(dir)
+    .filter((f) => /\.(png|jpe?g|webp|svg)$/i.test(f))
+    .sort()[0];
+  if (!file) return undefined;
+  return `${baseUrl.replace(/\/+$/, '')}/${cleaned}/${file}`;
+}
+
 export async function runStoryteller(
   req: StorytellerRequest = {},
   onProgress?: (run: StorytellerRun) => void,
@@ -688,6 +709,16 @@ export async function runStoryteller(
 
     // ── 8. render ─────────────────────────────────────────────────────────────
     setStatus('rendering');
+    const logoUrl = resolveBrandLogo(cfg.paths.publicDir, cfg.brand.logoDir, server.baseUrl);
+    if (logoUrl) {
+      note(`logo: ${logoUrl} (intro + closing)`);
+    } else if (cfg.brand.logoDir) {
+      warn(
+        `no logo image found in ${path.resolve(cfg.paths.publicDir, cfg.brand.logoDir)} — ` +
+          `drop a .png/.svg/.webp there (or set STORYTELLER_LOGO_DIR); intro and closing card render without one`,
+      );
+    }
+
     const payload: RenderPayload = buildRenderPayload({
       manifest,
       sceneAudio,
@@ -695,6 +726,8 @@ export async function runStoryteller(
       fps: FPS,
       bgMusicUrl: undefined,
       articleUrl: url,
+      logoUrl,
+      titleFontSize: cfg.brand.titleFontSize,
       annotationConfig: {
         showTitle: true,
         // Word-synced captions matter for silent autoplay; they need the ElevenLabs timestamps.

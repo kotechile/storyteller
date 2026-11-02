@@ -72,6 +72,7 @@ export const ExplainerStoryComposition: React.FC<ExplainerCompositionProps> = ({
   lighting,
   annotationConfig,
   logoUrl,
+  titleFontSize,
   audioBaseUrl,
 }) => {
   const { fps } = useVideoConfig();
@@ -138,6 +139,7 @@ export const ExplainerStoryComposition: React.FC<ExplainerCompositionProps> = ({
           subtitle={titleSubtitle}
           durationInFrames={titleCardDuration}
           logoUrl={logoUrl}
+          titleFontSize={titleFontSize}
         />
       </Sequence>
 

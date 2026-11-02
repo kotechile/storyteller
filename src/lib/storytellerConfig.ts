@@ -91,6 +91,18 @@ export interface StorytellerConfig {
     scale: number;
   };
 
+  /**
+   * Branding. The logo is picked from a FOLDER rather than a URL so dropping a file in is the whole
+   * workflow — no config edit, no rebuild. The first image in the folder (sorted) wins, which makes
+   * the choice deterministic when several brand variants sit there.
+   */
+  brand: {
+    /** Folder under public/ to read the logo from. '' disables the logo entirely. */
+    logoDir: string;
+    /** Intro title size in px. */
+    titleFontSize: number;
+  };
+
   storyboard: { research: boolean; focusTopics: string[]; recommendedSceneCount: number };
 
   video: {
@@ -137,6 +149,11 @@ export function loadStorytellerConfig(env: NodeJS.ProcessEnv = process.env): Sto
       // time, which is real money on a 6-minute unattended render.
       preset: str(env.STORYTELLER_RENDER_PRESET, 'medium'),
       scale: num(env.STORYTELLER_RENDER_SCALE, 1),
+    },
+
+    brand: {
+      logoDir: str(env.STORYTELLER_LOGO_DIR, 'brand'),
+      titleFontSize: num(env.STORYTELLER_TITLE_FONT_SIZE, 84),
     },
 
     storyboard: {

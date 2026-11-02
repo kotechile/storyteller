@@ -8,6 +8,8 @@ interface TitleCardSceneProps {
   durationInFrames?: number;
   /** Optional company logo URL to reveal prominently on title card */
   logoUrl?: string;
+  /** Intro title size in px (default 84 — the card shipped at 56 and read small on a phone). */
+  titleFontSize?: number;
 }
 
 /**
@@ -20,6 +22,7 @@ export const TitleCardScene: React.FC<TitleCardSceneProps> = ({
   subtitle,
   durationInFrames = 120,
   logoUrl,
+  titleFontSize = 84,
 }) => {
   const frame = useCurrentFrame();
 
@@ -103,7 +106,7 @@ export const TitleCardScene: React.FC<TitleCardSceneProps> = ({
       {/* Main Title */}
       <h1
         style={{
-          fontSize: 56,
+          fontSize: titleFontSize,
           fontWeight: 700,
           color: '#FFFFFF',
           textAlign: 'center',
