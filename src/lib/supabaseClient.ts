@@ -240,6 +240,62 @@ export async function resolveLlmModel(taskRole?: string): Promise<ResolvedLlmCon
   // 2. Direct client query (for Node environment or production SSR)
   const client = getSupabaseClient();
   if (client) {
+    /**
+     * ── llm_used_for is the routing table ────────────────────────────────────────────────────────
+     * Image and video models are already routed through `llm_used_for`; text roles were not, and were
+     * instead resolved by fuzzy-matching a role name against `llm_models.used_for`. That made routing
+     * configuration an invisible string tag with two failures: a role an operator routed in
+     * `llm_used_for` was ignored, and any unrelated row whose tag happened to contain the role name
+     * won the tie by `is_default`. Read the junction first, and say so when a role has no row.
+     */
+    if (taskRole) {
+      try {
+        const { data: routes, error: routeErr } = await client
+          .from('llm_used_for')
+          .select('llm_models_id, used_for')
+          .eq('used_for', taskRole)
+          .limit(1);
+        if (routeErr) {
+          console.warn(`[SupabaseClient] llm_used_for lookup failed for "${taskRole}":`, routeErr.message);
+        } else if (routes && routes.length > 0) {
+          const routedId = (routes[0] as any).llm_models_id;
+          const { data: rows } = await client.from('llm_models').select('*').eq('id', routedId).limit(1);
+          const routed = rows?.[0] as any;
+          if (routed) {
+            const apiKey = await resolveApiKeyFromModel(routed, client);
+            const provider = String(routed.provider || '').trim().toLowerCase();
+            const config: ResolvedLlmConfig = {
+              modelName: routed.model_name || routed.name,
+              provider,
+              apiKey,
+              baseUrl:
+                routed.base_url ||
+                (provider === 'deepseek' ? 'https://api.deepseek.com/v1' : undefined),
+            };
+            console.log(
+              `[SupabaseClient] llm_used_for → "${config.modelName}" (provider: ${config.provider}, task: ${taskRole}). Key present: ${!!config.apiKey}`,
+            );
+            if (!config.apiKey) {
+              // A routed model with no key is a configuration error, not a reason to silently pick
+              // another model: the run would then use a model nobody chose.
+              console.warn(
+                `[SupabaseClient] llm_used_for routed "${taskRole}" to "${config.modelName}" but its api_keys row has no key_value — ask for a key, do not fall back.`,
+              );
+            } else {
+              setCached(cacheKey, config);
+              return config;
+            }
+          }
+        } else {
+          console.warn(
+            `[SupabaseClient] No llm_used_for row for "${taskRole}" — falling back to is_default. Add a llm_used_for row to route this role explicitly.`,
+          );
+        }
+      } catch (err) {
+        console.warn(`[SupabaseClient] llm_used_for resolution threw for "${taskRole}":`, err);
+      }
+    }
+
     for (const tableName of ['llm_models', 'llm_modelss']) {
       try {
         console.log(`[SupabaseClient] Querying Supabase table "${tableName}" for models (taskRole: ${taskRole || 'default'})...`);
