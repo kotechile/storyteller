@@ -503,7 +503,61 @@ Respond STRICTLY with a valid JSON object matching this structure. Note the imag
       console.log('[NarrativeEngine] Step 3: Running Storyboard QA & Flow Review LLM Pass...');
       return { manifest: await reviewAndOptimizeStoryboard(draftManifest, llmConfig), usedFallback: false };
     } else {
-      throw new Error(`[NarrativeEngine] Storyboard schema validation failed: ${JSON.stringify(parsed.error.flatten())}`);
+      /**
+       * ONE repair round, quoting the exact violations.
+       *
+       * A model that returns the right shape but one bad enum value is a fixable answer, not a failed
+       * run — measured: gpt-4o produced a complete 8-scene storyboard in 20 s and was thrown away
+       * because `animationStrategy` came back as something outside
+       * reveal|highlight_off|highlight_on|focus_zoom|focus_region. Retrying the whole 40k-char prompt
+       * with a different model costs minutes and picks a model nobody chose; sending back only the
+       * violations costs seconds and keeps the routed model.
+       *
+       * Still throws when the repair round fails — a schema-invalid storyboard must never reach the
+       * renderer, so this is a retry, not a fallback.
+       */
+      const violations = parsed.error.issues
+        .map((issue) => `- ${issue.path.join('.') || '(root)'}: ${issue.message}`)
+        .join('\n');
+      console.warn(`[NarrativeEngine] Storyboard failed validation (${parsed.error.issues.length} issue(s)) — attempting one repair round:\n${violations}`);
+
+      const repairPrompt = [
+        'The JSON storyboard you returned failed schema validation. Here are the exact violations:',
+        violations,
+        '',
+        'Return the COMPLETE corrected storyboard JSON, nothing else, with the same scenes and the same',
+        'narration text — only fix the fields named above. Do not add commentary, do not drop scenes.',
+        'Allowed values for syncHints[].triggerAction: "reveal" | "highlight_off" | "highlight_on" | "focus_zoom" | "focus_region".',
+        'Allowed values for scenes[].animationStrategy: "static" | "programmatic" | "image_to_video" | "text_to_video".',
+        '',
+        'Previous JSON:',
+        JSON.stringify(rawParsed),
+      ].join('\n');
+
+      const repairResp = await callLlm(llmConfig, repairPrompt, true);
+      let repairedRaw: any;
+      try {
+        repairedRaw = JSON.parse(repairResp);
+      } catch {
+        repairedRaw = tryRepairJson(repairResp);
+      }
+      if (repairedRaw) sanitizeNulls(repairedRaw);
+      const repairedParse = repairedRaw ? storyboardManifestSchema.safeParse(repairedRaw) : null;
+
+      if (repairedParse?.success) {
+        console.log('[NarrativeEngine] Repair round produced a valid storyboard.');
+        return {
+          manifest: await reviewAndOptimizeStoryboard(repairedParse.data as StoryboardManifest, llmConfig),
+          usedFallback: false,
+        };
+      }
+
+      const secondErrors = repairedParse
+        ? JSON.stringify(repairedParse.error.flatten())
+        : 'repair response was not parseable JSON';
+      throw new Error(
+        `[NarrativeEngine] Storyboard schema validation failed after one repair round: ${JSON.stringify(parsed.error.flatten())} :: repair: ${secondErrors}`,
+      );
     }
   } catch (err: any) {
     console.error('[NarrativeEngine] Error during LLM generation:', err);
