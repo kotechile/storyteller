@@ -376,6 +376,12 @@ Every scene MUST include an "animationStrategy" field. Classify each scene by ho
 
 - "static" — Use for simple single-fact scenes, title cards (sceneNumber: 0), closing/conclusion cards, quote overlays. No animation.
 
+CLIP LENGTH LIMIT (HARD CONSTRAINT — applies to image_to_video and text_to_video):
+The video provider clips at 15 seconds. An animated scene whose narration runs longer than that plays its clip and then holds the last frame for the remainder — which reads as a frozen video, and is the single most common quality complaint about these renders. So:
+  - Only tag a scene "image_to_video" or "text_to_video" if its narration is about 37 words or fewer (~14-15 seconds at a natural speaking pace). Count the words before you decide.
+  - If a scene needs more than ~37 words, it must be "programmatic" (diagram built from elements) or "static" (still image). Do not split a scene purely to qualify for animation — the reveal timing and the argument both break.
+  - Scenes 0 (title), the cinematic interlude, and the conclusion are the natural animation candidates; a long explanatory scene is not.
+
 ═══════════════════════════════════════
 CINEMATIC INTERLUDE (REQUIRED — EXACTLY ONE SCENE)
 ═══════════════════════════════════════

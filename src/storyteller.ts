@@ -220,6 +220,50 @@ function hasVideoElement(scene: any): boolean {
  * an unrenderable scene that fails the image gate. So a `text_to_video` scene is left animated and the
  * cap is reported as best-effort — the alternative silently drops a scene's visual.
  */
+/**
+ * Seedance clips are capped at 15 s BY THE PROVIDER, so an animated scene longer than that plays its
+ * clip and then holds the last frame for the remainder — measured on a real run: four scenes froze for
+ * 32, 40, 52 and 58 seconds respectively. Two ways to prevent that: split the narration, or do not
+ * animate the scene. This takes the second, because it is free and loses only motion on scenes that
+ * cannot have motion for their whole length anyway.
+ *
+ * The trigger is the NARRATION LENGTH, not `scene.duration`: the planner's duration estimate is what
+ * was wrong in that run (it planned ~12 s for 111 words, which is ~45 s of speech at 150 wpm).
+ *
+ * Only `image_to_video` is demoted — it keeps its still, so the scene stays renderable. A
+ * `text_to_video` scene has no image at all; demoting it would leave a blank frame, so it stays
+ * animated and the freeze is reported as a warning instead.
+ */
+const SEEDANCE_CLIP_SECONDS = Math.max(5, Number(process.env.STORYTELLER_VIDEO_CLIP_SECONDS) || 15);
+/** 150 words per minute of narration. */
+const NARRATION_WORDS_PER_SECOND = 2.5;
+
+function keepShortScenesAnimated(
+  manifest: StoryboardManifest,
+  clipSeconds: number,
+  note: (m: string) => void,
+): StoryboardManifest {
+  const demoted: string[] = [];
+  for (const scene of manifest.scenes) {
+    if ((scene as any).animationStrategy !== 'image_to_video') continue;
+    const words = String(scene.narration ?? '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean).length;
+    const estimated = Math.max(Number(scene.duration) || 0, words / NARRATION_WORDS_PER_SECOND);
+    if (estimated <= clipSeconds) continue;
+    (scene as any).animationStrategy = 'static';
+    demoted.push(`${scene.sceneNumber} (${estimated.toFixed(1)}s)`);
+  }
+  if (demoted.length) {
+    note(
+      `clip cap ${clipSeconds}s: scene(s) ${demoted.join(', ')} kept as static stills — a ${clipSeconds}s ` +
+        `clip cannot cover that much narration and would hold its last frame`,
+    );
+  }
+  return manifest;
+}
+
 function capAnimatedScenes(manifest: StoryboardManifest, maxScenes: number, note: (m: string) => void): StoryboardManifest {
   if (maxScenes <= 0) return manifest;
 
@@ -493,6 +537,8 @@ export async function runStoryteller(
       note(`video: reused from the resumed artifact (${run.animatedScenes} animated scene(s))`);
     } else if (cfg.video.enabled) {
       setStatus('video');
+      // Order matters: refuse to animate scenes a clip cannot cover BEFORE spending on the clip.
+      manifest = keepShortScenesAnimated(manifest, SEEDANCE_CLIP_SECONDS, warn);
       manifest = capAnimatedScenes(manifest, cfg.video.maxScenes, note);
       manifest = await generateVideosForManifest(
         manifest,
